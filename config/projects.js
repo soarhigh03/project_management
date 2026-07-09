@@ -28,6 +28,24 @@ export default [
     // ],
   },
 
+  {
+    id: 'patz',
+    name: 'patz',
+    // 비밀번호: threeever
+    passwordHash: 'scrypt:16384:8:1:a3107cbc72e79a9de93c081bbbe019fc:ed89a334818401622794c80f389725b55cc5fd167375ced6c7e2d2cb3ca1d4f0',
+    members: ['채은', '민우', '은우'],
+    regions: ['홈', '탐색', '지도', '커뮤니티', '설정', 'DB'],
+  },
+
+  {
+    id: 'jarvis',
+    name: 'jarvis',
+    // 비밀번호: stark
+    passwordHash: 'scrypt:16384:8:1:7471c5ef3293f28b2523ee8c85f1a42a:01b24325d8e35cdfe05d51a3ad9bcc6772c2eea659b002aae96f27e287cd81d9',
+    members: ['호승', '동휘', '유리', '은우'],
+    regions: ['디자인', 'AI', '프론트', '기획'],
+  },
+
   // 프로젝트를 추가하려면 위 블록을 복사해서 붙여넣고 수정하세요.
   // {
   //   id: 'my-app',

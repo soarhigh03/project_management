@@ -1,0 +1,14 @@
+{
+  "name": "tasktrack",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "가벼운 버그 추적 + 기능(노드 그래프) 관리 보드",
+  "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "hash": "node scripts/hash-password.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

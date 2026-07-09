@@ -160,8 +160,9 @@ TT.pages.features = async function (main, project) {
       <div class="port in" title="선행 작업 연결 (입력)"></div>
       <div class="port out" title="드래그해서 다음 작업에 연결 (출력)"></div>
       <div class="job-head">
-        <span class="job-title" title="더블클릭으로 이름 변경">${TT.esc(j.title)}</span>
+        <span class="job-title" title="클릭 또는 더블클릭으로 이름 변경">${TT.esc(j.title)}</span>
         ${jobBadge(j)}
+        <button class="job-edit" title="이름 변경">✎</button>
         <button class="job-x" title="작업 삭제">✕</button>
       </div>
       <div class="job-assign">
@@ -217,13 +218,16 @@ TT.pages.features = async function (main, project) {
 
     // ----- 제목 인라인 수정 -----
     const titleEl = el.querySelector('.job-title');
-    titleEl.ondblclick = () => {
+    const startTitleEdit = () => {
+      if (el.querySelector('.job-title-input')) return; // 이미 편집 중
+      const current = el.querySelector('.job-title');
+      if (!current) return;
       interacting = true;
       const input = document.createElement('input');
       input.className = 'job-title-input';
       input.value = j.title;
       input.maxLength = 200;
-      titleEl.replaceWith(input);
+      current.replaceWith(input);
       input.focus(); input.select();
       const commit = () => {
         interacting = false;
@@ -236,7 +240,15 @@ TT.pages.features = async function (main, project) {
         if (e.key === 'Enter') input.blur();
         if (e.key === 'Escape') { input.value = j.title; input.blur(); }
       };
+      // 드래그로 오인되지 않도록 pointerdown 버블링 차단
+      input.addEventListener('pointerdown', (e) => e.stopPropagation());
     };
+    titleEl.ondblclick = startTitleEdit;
+
+    // ----- 이름 변경 버튼 -----
+    const editBtn = el.querySelector('.job-edit');
+    editBtn.onclick = (e) => { e.stopPropagation(); startTitleEdit(); };
+    editBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
 
     // ----- 잡 삭제 (2단 확인) -----
     const xBtn = el.querySelector('.job-x');

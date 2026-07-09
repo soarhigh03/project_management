@@ -269,6 +269,11 @@ svg.edges g.sel path.edge-line { stroke: var(--accent); stroke-width: 3; }
   font-size: 14px; padding: 0 2px; flex: none; line-height: 1;
 }
 .job-x:hover { color: var(--red); }
+.job-edit {
+  border: none; background: none; color: var(--text-faint); cursor: pointer;
+  font-size: 13px; padding: 0 2px; flex: none; line-height: 1;
+}
+.job-edit:hover { color: var(--accent); }
 
 .job-assign { display: flex; align-items: center; gap: 6px; padding: 7px 12px 0; }
 .job-assign select { flex: 1; padding: 4px 6px; font-size: 12px; }

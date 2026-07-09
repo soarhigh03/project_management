@@ -1,7 +1,7 @@
 // 앱 셸: URL 파싱 → 세션 확인 → 탭(버그/기능) 전환 + "나" 선택
 (async function () {
   // URL: /p/{projectId}/{tab}
-  const m = location.pathname.match(/^\/p\/([a-z0-9-]+)(?:\/(bugs|features))?/);
+  const m = location.pathname.match(/^\/p\/([a-z0-9-]+)(?:\/(bugs|features|meetings))?/);
   if (!m) { location.href = '/'; return; }
   const projectId = m[1];
   let tab = m[2] || 'bugs';
@@ -51,14 +51,13 @@
     tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
     if (push) history.pushState({}, '', `/p/${project.id}/${tab}`);
     main.innerHTML = '';
-    destroyCurrent = tab === 'bugs'
-      ? await TT.pages.bugs(main, project)
-      : await TT.pages.features(main, project);
+    const page = TT.pages[tab] || TT.pages.bugs;
+    destroyCurrent = await page(main, project);
   }
 
   tabs.forEach((t) => { t.onclick = () => show(t.dataset.tab, true); });
   window.onpopstate = () => {
-    const mm = location.pathname.match(/\/(bugs|features)$/);
+    const mm = location.pathname.match(/\/(bugs|features|meetings)$/);
     show(mm ? mm[1] : 'bugs', false);
   };
 

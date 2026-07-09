@@ -23,7 +23,7 @@ const MIME = {
 };
 
 const apiHandlers = {};
-for (const name of ['auth', 'config', 'bugs', 'features']) {
+for (const name of ['auth', 'config', 'bugs', 'features', 'meetings']) {
   apiHandlers[name] = (await import(`../api/${name}.js`)).default;
 }
 

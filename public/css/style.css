@@ -309,7 +309,14 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
 .job.done .job-head { background: linear-gradient(180deg, rgba(248,255,161,.15), rgba(248,255,161,.03)); }
 .job.blocked .job-head { background: linear-gradient(180deg, rgba(255,139,139,.14), rgba(255,139,139,.03)); }
 .job-title { font-weight: 700; font-size: 13.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.1px; }
-.job-title-input { width: 100%; padding: 3px 8px; font-size: 13px; border-radius: 8px; }
+.job-title-input {
+  width: 100%; padding: 4px 8px; font-size: 13px;
+  border-radius: 8px;
+  background: var(--bg2); color: var(--text);
+  border: 1px solid var(--lilac); outline: none;
+  box-shadow: 0 0 0 3px rgba(168, 163, 246, .15);
+  font-weight: 700;
+}
 .job-badge { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; flex: none; letter-spacing: .2px; }
 .job-badge.b-done { background: rgba(248,255,161,.15); color: var(--lemon); }
 .job-badge.b-blocked { background: rgba(255,139,139,.18); color: var(--red); }

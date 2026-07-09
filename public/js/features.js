@@ -22,7 +22,7 @@ TT.pages.features = async function (main, project) {
       <div class="feat-toolbar">
         <button class="btn primary" id="addJob">+ 작업 추가</button>
         <button class="btn" id="fitBtn">화면 맞춤</button>
-        <span class="feat-hint">💡 빈 곳 더블클릭: 작업 추가 · 오른쪽 점→왼쪽 점 드래그: 의존성 연결 · 선 클릭: 연결 삭제 · 휠: 확대/축소</span>
+        <span class="feat-hint">빈 곳 더블클릭: 작업 추가 · 오른쪽 점→왼쪽 점 드래그: 의존성 연결 · 선 클릭: 연결 삭제 · 휠: 확대/축소</span>
       </div>
       <div class="canvas" id="canvas">
         <div class="world" id="world">

@@ -93,7 +93,7 @@ TT.pages.bugs = async function (main, project) {
             ${project.members.map((mname) => `<option value="${TT.esc(mname)}" ${mname === b.assignee ? 'selected' : ''}>${TT.esc(mname)}</option>`).join('')}
           </select>
         </td>
-        <td class="due-cell ${overdue ? 'overdue' : ''} hide-sm">${overdue ? '⚠ ' : ''}${TT.fmtDate(b.due)}</td>
+        <td class="due-cell ${overdue ? 'overdue' : ''} hide-sm">${TT.fmtDate(b.due)}</td>
       </tr>`;
     }).join('');
 
@@ -129,7 +129,7 @@ TT.pages.bugs = async function (main, project) {
     back.className = 'modal-back';
     back.innerHTML = `
       <div class="modal">
-        <h3>${isNew ? '🐞 버그 신고' : `#${b.num} 수정`}</h3>
+        <h3>${isNew ? '버그 신고' : `#${b.num} 수정`}</h3>
         <div class="grid">
           <div class="field full"><label>제목 *</label><input type="text" id="mTitle" value="${TT.esc(b.title)}" maxlength="200"></div>
           <div class="field full"><label>설명</label><textarea id="mDesc">${TT.esc(b.desc)}</textarea></div>

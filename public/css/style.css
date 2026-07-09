@@ -43,6 +43,9 @@ html, body {
   line-height: 1.5;
 }
 
+/* 인증 확인 전에는 앱 셸을 감춰서 로그인 안 된 상태로 UI가 잠깐 노출되는 걸 막음 */
+body.preauth > .app { visibility: hidden; }
+
 button, input, select, textarea { font: inherit; color: inherit; }
 
 a { color: var(--accent); text-decoration: none; }

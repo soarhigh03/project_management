@@ -17,6 +17,7 @@
   TT.project = project;
   document.title = `${project.name} — TaskTrack`;
   document.getElementById('projName').textContent = project.name;
+  document.body.classList.remove('preauth');
 
   // ---- "나" (담당자 필터/기본값에 사용, localStorage에 기억) ----
   const meKey = `tt_me:${project.id}`;

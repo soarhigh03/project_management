@@ -41,6 +41,13 @@ const server = http.createServer(async (req, res) => {
     return handler(req, res);
   }
 
+  // /p/* 요청은 세션 쿠키가 없으면 로그인 화면으로 리다이렉트 (vercel.json redirects와 동일)
+  if (p.startsWith('/p/') && !/(?:^|;\s*)tt_sess=/.test(req.headers.cookie || '')) {
+    res.statusCode = 302;
+    res.setHeader('Location', '/');
+    return res.end();
+  }
+
   // 정적 파일 (+ /p/* → app.html 리라이트, vercel.json과 동일)
   let file = p === '/' ? '/index.html' : p;
   if (p.startsWith('/p/')) file = '/app.html';

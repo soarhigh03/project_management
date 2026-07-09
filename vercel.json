@@ -1,6 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "public",
+  "redirects": [
+    {
+      "source": "/p/:path*",
+      "missing": [{ "type": "cookie", "key": "tt_sess" }],
+      "destination": "/",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/p/:path*", "destination": "/app.html" }
   ],

@@ -16,6 +16,12 @@ export default route({
   async GET(req, res) {
     const project = requireProject(req, res);
     if (!project) return;
+    const sid = query(req).get('screenshotId');
+    if (sid) {
+      const screenshot = await store.getScreenshot(project.id, sid);
+      if (!screenshot) return json(res, 404, { error: '스크린샷을 찾을 수 없습니다.' });
+      return json(res, 200, { screenshot });
+    }
     json(res, 200, { bugs: await store.listBugs(project.id) });
   },
 

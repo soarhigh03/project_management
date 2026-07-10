@@ -79,7 +79,7 @@ TT.pages.bugs = async function (main, project) {
       return `
       <tr class="bug-row ${b.state === 'done' ? 'bug-done' : ''}" data-num="${b.num}">
         <td class="bug-num">#${b.num}</td>
-        <td class="bug-title">${TT.esc(b.title)}${b.desc ? `<span class="bug-desc-preview">${TT.esc(b.desc)}</span>` : ''}</td>
+        <td class="bug-title">${b.screenshotId ? '<span class="bug-ss-dot" title="스크린샷 포함"></span>' : ''}${TT.esc(b.title)}${b.desc ? `<span class="bug-desc-preview">${TT.esc(b.desc)}</span>` : ''}</td>
         <td class="hide-sm">${TT.esc(b.region)}</td>
         <td><span class="chip u-${TT.esc(b.urgency)}"><span class="dot"></span>${TT.esc(urgName(b.urgency))}</span></td>
         <td>
@@ -118,12 +118,51 @@ TT.pages.bugs = async function (main, project) {
     });
   }
 
+  // ---------- 스크린샷 유틸 ----------
+  async function compressImage(file, { maxSide = 1600, quality = 0.82 } = {}) {
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(new Error('파일을 읽을 수 없습니다.'));
+      r.readAsDataURL(file);
+    });
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('이미지를 열 수 없습니다.'));
+      i.src = dataUrl;
+    });
+    let { width, height } = img;
+    const scale = Math.min(1, maxSide / Math.max(width, height));
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+    let q = quality;
+    let out = canvas.toDataURL('image/jpeg', q);
+    // 800KB 상한 근접까지 품질 다운
+    while (out.length > 700 * 1024 && q > 0.4) {
+      q -= 0.1;
+      out = canvas.toDataURL('image/jpeg', q);
+    }
+    return out;
+  }
+
+  function openLightbox(src) {
+    const bg = document.createElement('div');
+    bg.className = 'lightbox';
+    bg.innerHTML = `<img src="${src}" alt="스크린샷"><button class="lightbox-close" title="닫기">✕</button>`;
+    bg.onclick = () => bg.remove();
+    document.body.appendChild(bg);
+  }
+
   // ---------- 생성/수정 모달 ----------
   function openModal(bug) {
     const isNew = !bug;
     const b = bug || {
       title: '', desc: '', region: project.regions[0] || '', urgency: 'mid',
-      state: 'todo', assignee: '', due: '',
+      state: 'todo', assignee: '', due: '', screenshotId: null,
     };
     const back = document.createElement('div');
     back.className = 'modal-back';
@@ -148,6 +187,20 @@ TT.pages.bugs = async function (main, project) {
             <select id="mAssignee"><option value="">미지정</option>${project.members.map((mn) => `<option ${mn === b.assignee ? 'selected' : ''}>${TT.esc(mn)}</option>`).join('')}</select>
           </div>
           <div class="field"><label>마감일</label><input type="date" id="mDue" value="${TT.esc(b.due)}"></div>
+          <div class="field full">
+            <label>스크린샷 <span class="lbl-hint">(선택 · 클릭 또는 붙여넣기)</span></label>
+            <div class="ss-drop" id="mSsDrop" tabindex="0">
+              <div class="ss-empty" id="mSsEmpty">
+                <span>이미지 선택 · 드래그 · Ctrl/⌘+V 붙여넣기</span>
+              </div>
+              <div class="ss-thumb" id="mSsThumb" hidden>
+                <img id="mSsImg" alt="스크린샷 미리보기">
+                <button type="button" class="ss-remove" id="mSsRemove" title="제거">✕</button>
+              </div>
+              <input type="file" id="mSsFile" accept="image/*" hidden>
+            </div>
+            <p class="ss-err form-err" id="mSsErr"></p>
+          </div>
         </div>
         ${isNew ? '' : `<p class="meta-line">등록: ${TT.esc(b.reporter || '?')} · ${new Date(b.createdAt).toLocaleString('ko-KR')}</p>`}
         <div class="modal-foot">
@@ -160,6 +213,9 @@ TT.pages.bugs = async function (main, project) {
     document.body.appendChild(back);
     const q = (id) => back.querySelector('#' + id);
     let urgency = b.urgency;
+    // 스크린샷 상태: undefined = 변경 없음, null = 제거, string = 새 dataURL
+    let screenshotChange = undefined;
+    let screenshotPreview = null;
 
     back.onclick = (e) => { if (e.target === back) back.remove(); };
     q('mCancel').onclick = () => back.remove();
@@ -170,6 +226,89 @@ TT.pages.bugs = async function (main, project) {
       };
     });
     q('mTitle').focus();
+
+    // ---------- 스크린샷 상호작용 ----------
+    const drop = q('mSsDrop');
+    const emptyEl = q('mSsEmpty');
+    const thumbEl = q('mSsThumb');
+    const imgEl = q('mSsImg');
+    const errEl = q('mSsErr');
+    const fileInp = q('mSsFile');
+
+    function showThumb(dataUrl) {
+      screenshotPreview = dataUrl;
+      imgEl.src = dataUrl;
+      emptyEl.hidden = true;
+      thumbEl.hidden = false;
+      errEl.textContent = '';
+    }
+    function clearThumb() {
+      screenshotPreview = null;
+      imgEl.removeAttribute('src');
+      emptyEl.hidden = false;
+      thumbEl.hidden = true;
+    }
+    async function handleFile(file) {
+      if (!file || !file.type.startsWith('image/')) {
+        errEl.textContent = '이미지 파일만 첨부할 수 있습니다.';
+        return;
+      }
+      try {
+        errEl.textContent = '압축 중…';
+        const dataUrl = await compressImage(file);
+        showThumb(dataUrl);
+        screenshotChange = dataUrl;
+      } catch (ex) {
+        errEl.textContent = ex.message;
+      }
+    }
+
+    // 편집 모드: 기존 스크린샷 로드
+    if (!isNew && b.screenshotId) {
+      emptyEl.hidden = true;
+      thumbEl.hidden = false;
+      imgEl.alt = '불러오는 중…';
+      TT.api('GET', `/api/bugs?project=${project.id}&screenshotId=${encodeURIComponent(b.screenshotId)}`)
+        .then(({ screenshot }) => { screenshotPreview = screenshot; imgEl.src = screenshot; })
+        .catch(() => { errEl.textContent = '기존 스크린샷을 불러오지 못했습니다.'; clearThumb(); });
+    }
+
+    drop.onclick = (e) => {
+      if (e.target.closest('.ss-remove, img')) return;
+      fileInp.click();
+    };
+    fileInp.onchange = () => { const f = fileInp.files?.[0]; if (f) handleFile(f); fileInp.value = ''; };
+
+    imgEl.onclick = () => { if (screenshotPreview) openLightbox(screenshotPreview); };
+
+    q('mSsRemove').onclick = (e) => {
+      e.stopPropagation();
+      clearThumb();
+      screenshotChange = null;
+    };
+
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.add('drag');
+    }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.remove('drag');
+    }));
+    drop.addEventListener('drop', (e) => {
+      const f = e.dataTransfer?.files?.[0];
+      if (f) handleFile(f);
+    });
+
+    // 모달 내 붙여넣기 → 이미지 첨부
+    back.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of items) {
+        if (it.type && it.type.startsWith('image/')) {
+          const f = it.getAsFile();
+          if (f) { handleFile(f); e.preventDefault(); break; }
+        }
+      }
+    });
 
     if (!isNew) {
       let armed = false;
@@ -194,6 +333,7 @@ TT.pages.bugs = async function (main, project) {
         assignee: q('mAssignee').value,
         due: q('mDue').value,
       };
+      if (screenshotChange !== undefined) payload.screenshot = screenshotChange;
       q('mSave').disabled = true;
       try {
         if (isNew) {

@@ -5,15 +5,25 @@ window.TT = window.TT || {};
 TT.pages = TT.pages || {};
 
 TT.pages.features = async function (main, project) {
-  const NODE_W = 240;
-  const PORT_Y = 20; // 노드 상단에서 포트 중심까지
+  const NODE_W = 244;    // 기본/신규 잡 폭
+  const NODE_MIN = 200;
+  const NODE_MAX = 800;
+  const PORT_Y = 20;     // 노드 상단에서 포트 중심까지
+  const TASK_STATES = [
+    { id: 'todo', name: '시작 전' },
+    { id: 'doing', name: '진행 중' },
+    { id: 'waiting', name: '대기' },
+    { id: 'done', name: '완료' },
+  ];
+  const taskWidth = (j) => j.width || NODE_W;
 
-  let jobs = [];   // {id,title,assignee,x,y,tasks:[{id,title,assignee,done}]}
+  let jobs = [];   // {id,title,assignee,x,y,width,tasks:[{id,title,assignee,status,done}]}
   let edges = [];  // {id,from,to}
   const view = { x: 60, y: 40, z: 1 };
   let selEdge = null;      // 선택된 간선 id
   let draft = null;        // 간선 드래그 중 {from, mx, my}
   let dragging = null;     // 노드 드래그 중
+  let resizing = null;     // 노드 리사이즈 중
   let interacting = false; // 폴링 억제 플래그
   let focusAddJob = null;  // 재렌더 후 포커스 복원할 잡 id
 
@@ -40,7 +50,8 @@ TT.pages.features = async function (main, project) {
   const nodesEl = main.querySelector('#nodes');
 
   const jobById = (id) => jobs.find((j) => j.id === id);
-  const jobDone = (j) => j.tasks.length > 0 && j.tasks.every((t) => t.done);
+  const taskStatus = (t) => t.status || (t.done ? 'done' : 'todo');
+  const jobDone = (j) => j.tasks.length > 0 && j.tasks.every((t) => taskStatus(t) === 'done');
   const jobBlocked = (j) => edges.some((e) => e.to === j.id && jobById(e.from) && !jobDone(jobById(e.from)));
 
   function applyView() {
@@ -78,7 +89,7 @@ TT.pages.features = async function (main, project) {
   // ---------- 간선 그리기 ----------
   function portPos(job, kind) {
     return kind === 'out'
-      ? { x: job.x + NODE_W, y: job.y + PORT_Y }
+      ? { x: job.x + taskWidth(job), y: job.y + PORT_Y }
       : { x: job.x, y: job.y + PORT_Y };
   }
 
@@ -152,13 +163,19 @@ TT.pages.features = async function (main, project) {
     el.className = 'job' + (jobDone(j) ? ' done' : jobBlocked(j) ? ' blocked' : '');
     el.style.left = j.x + 'px';
     el.style.top = j.y + 'px';
+    el.style.width = taskWidth(j) + 'px';
     el.dataset.id = j.id;
-    const doneCount = j.tasks.filter((t) => t.done).length;
+    const doneCount = j.tasks.filter((t) => taskStatus(t) === 'done').length;
     const pct = j.tasks.length ? Math.round((doneCount / j.tasks.length) * 100) : 0;
+
+    const taskStatusOptions = (cur) =>
+      TASK_STATES.map((s) => `<option value="${s.id}" ${s.id === cur ? 'selected' : ''}>${s.name}</option>`).join('');
 
     el.innerHTML = `
       <div class="port in" title="선행 작업 연결 (입력)"></div>
       <div class="port out" title="드래그해서 다음 작업에 연결 (출력)"></div>
+      <div class="job-resize left" title="왼쪽으로 늘리기"></div>
+      <div class="job-resize right" title="오른쪽으로 늘리기"></div>
       <div class="job-head">
         <span class="job-title" title="클릭 또는 더블클릭으로 이름 변경">${TT.esc(j.title)}</span>
         ${jobBadge(j)}
@@ -170,16 +187,70 @@ TT.pages.features = async function (main, project) {
         <select class="j-assignee">${memberOptions(j.assignee)}</select>
       </div>
       <div class="tasks">
-        ${j.tasks.map((t) => `
-          <div class="task ${t.done ? 'done' : ''}" data-task="${t.id}">
-            <input type="checkbox" ${t.done ? 'checked' : ''} title="완료 체크">
+        ${j.tasks.map((t) => {
+          const st = taskStatus(t);
+          return `
+          <div class="task s-${st} ${st === 'done' ? 'done' : ''}" data-task="${t.id}">
+            <input type="checkbox" ${st === 'done' ? 'checked' : ''} title="완료 체크">
             <span class="t-title" title="더블클릭으로 수정">${TT.esc(t.title)}</span>
+            <select class="t-status s-${st}" title="진행 상태">${taskStatusOptions(st)}</select>
             <select class="t-assignee" title="담당자">${memberOptions(t.assignee)}</select>
             <button class="t-x" title="삭제">✕</button>
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>
       <div class="job-add"><input type="text" placeholder="+ 할 일 추가 (Enter)" maxlength="300"></div>
       <div class="progress"><div style="width:${pct}%"></div></div>`;
+
+    // ----- 리사이즈 핸들 (좌/우) -----
+    el.querySelectorAll('.job-resize').forEach((handle) => {
+      const side = handle.classList.contains('left') ? 'left' : 'right';
+      handle.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (e.button !== 0) return;
+        resizing = {
+          job: j, el, side,
+          startX: e.clientX,
+          startWidth: taskWidth(j),
+          startXPos: j.x,
+          moved: false,
+        };
+        interacting = true;
+        el.classList.add('resizing');
+        handle.setPointerCapture(e.pointerId);
+      });
+      handle.addEventListener('pointermove', (e) => {
+        if (!resizing || resizing.job !== j) return;
+        const dx = (e.clientX - resizing.startX) / view.z;
+        let w, nx = resizing.startXPos;
+        if (side === 'right') {
+          w = Math.round(resizing.startWidth + dx);
+        } else {
+          w = Math.round(resizing.startWidth - dx);
+          nx = Math.round(resizing.startXPos + dx);
+        }
+        w = Math.max(NODE_MIN, Math.min(NODE_MAX, w));
+        // 실제 delta 재계산 (min/max에 클램프된 경우 x 보정)
+        if (side === 'left') nx = resizing.startXPos + (resizing.startWidth - w);
+        j.width = w; j.x = nx;
+        resizing.moved = true;
+        el.style.width = w + 'px';
+        el.style.left = j.x + 'px';
+        renderEdges();
+      });
+      handle.addEventListener('pointerup', () => {
+        if (!resizing || resizing.job !== j) return;
+        el.classList.remove('resizing');
+        const moved = resizing.moved;
+        resizing = null;
+        interacting = false;
+        if (moved) {
+          TT.api('POST', `/api/features?project=${project.id}`, {
+            op: 'updateJob', jobId: j.id, x: j.x, width: j.width,
+          }).catch((ex) => TT.toast(ex.message, true));
+        }
+      });
+    });
 
     // ----- 노드 드래그 (헤더) -----
     const head = el.querySelector('.job-head');
@@ -270,6 +341,11 @@ TT.pages.features = async function (main, project) {
       const task = j.tasks.find((t) => t.id === tid);
       tEl.querySelector('input[type=checkbox]').onchange = (e) =>
         op({ op: 'updateTask', jobId: j.id, taskId: tid, done: e.target.checked });
+      tEl.querySelector('.t-status').onchange = (e) => {
+        // 서버 응답 오기 전 즉시 색 반영
+        e.target.className = 't-status s-' + e.target.value;
+        op({ op: 'updateTask', jobId: j.id, taskId: tid, status: e.target.value });
+      };
       tEl.querySelector('.t-assignee').onchange = (e) =>
         op({ op: 'updateTask', jobId: j.id, taskId: tid, assignee: e.target.value });
       tEl.querySelector('.t-x').onclick = () =>

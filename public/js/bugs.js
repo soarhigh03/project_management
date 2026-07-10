@@ -32,7 +32,7 @@ TT.pages.bugs = async function (main, project) {
           <thead><tr>
             <th style="width:52px">#</th><th>제목</th><th style="width:90px" class="hide-sm">영역</th>
             <th style="width:80px">긴급도</th><th style="width:110px">상태</th>
-            <th style="width:110px">담당자</th><th style="width:90px" class="hide-sm">마감일</th>
+            <th style="width:110px" class="hide-xs">담당자</th><th style="width:90px" class="hide-sm">마감일</th>
           </tr></thead>
           <tbody id="rows"></tbody>
         </table>
@@ -87,7 +87,7 @@ TT.pages.bugs = async function (main, project) {
             ${STATES.map((s) => `<option value="${s.id}" ${s.id === b.state ? 'selected' : ''}>${s.name}</option>`).join('')}
           </select>
         </td>
-        <td>
+        <td class="hide-xs">
           <select class="mini-select" data-quick="assignee" data-num="${b.num}">
             <option value="">미지정</option>
             ${project.members.map((mname) => `<option value="${TT.esc(mname)}" ${mname === b.assignee ? 'selected' : ''}>${TT.esc(mname)}</option>`).join('')}

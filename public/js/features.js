@@ -350,9 +350,11 @@ TT.pages.features = async function (main, project) {
         op({ op: 'updateTask', jobId: j.id, taskId: tid, assignee: e.target.value });
       tEl.querySelector('.t-x').onclick = () =>
         op({ op: 'deleteTask', jobId: j.id, taskId: tid });
-      tEl.querySelector('.t-title').ondblclick = () => {
-        interacting = true;
+      const startTaskEdit = (e) => {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
         const span = tEl.querySelector('.t-title');
+        if (!span) return; // 이미 편집 중
+        interacting = true;
         const input = document.createElement('input');
         input.className = 't-edit';
         input.type = 'text';
@@ -360,6 +362,8 @@ TT.pages.features = async function (main, project) {
         input.maxLength = 300;
         span.replaceWith(input);
         input.focus(); input.select();
+        input.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+        input.addEventListener('dblclick', (ev) => ev.stopPropagation());
         const commit = () => {
           interacting = false;
           const v = input.value.trim();
@@ -367,11 +371,16 @@ TT.pages.features = async function (main, project) {
           else render();
         };
         input.onblur = commit;
-        input.onkeydown = (e) => {
-          if (e.key === 'Enter') input.blur();
-          if (e.key === 'Escape') { input.value = task.title; input.blur(); }
+        input.onkeydown = (ev) => {
+          if (ev.key === 'Enter') input.blur();
+          if (ev.key === 'Escape') { input.value = task.title; input.blur(); }
         };
       };
+      // 태스크 어디를 더블클릭해도 편집 (컨트롤 요소는 제외)
+      tEl.addEventListener('dblclick', (e) => {
+        if (e.target.closest('input, select, button')) return;
+        startTaskEdit(e);
+      });
     });
 
     // ----- 할 일 추가 -----
@@ -478,7 +487,7 @@ TT.pages.features = async function (main, project) {
   }, { passive: false });
 
   canvas.addEventListener('dblclick', (e) => {
-    if (e.target.closest('.job, .edge-del')) return;
+    if (e.target.closest('.job, .edge-del, .task, .tasks')) return;
     const p = toWorld(e.clientX, e.clientY);
     op({ op: 'addJob', title: '새 작업', x: p.x - NODE_W / 2, y: p.y - 20, assignee: TT.me() });
   });

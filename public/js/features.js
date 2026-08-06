@@ -393,9 +393,9 @@ TT.pages.features = async function (main, project) {
         const row = handle.closest('.task');
         interacting = true;
         row.classList.add('t-dragging');
-        handle.setPointerCapture(e.pointerId);
         let moved = false;
 
+        // DOM 재삽입 시 pointer capture가 풀리므로 document에 리스너를 붙인다
         const onMove = (ev) => {
           moved = true;
           const others = [...tasksEl.querySelectorAll('.task:not(.t-dragging)')];
@@ -407,16 +407,16 @@ TT.pages.features = async function (main, project) {
           else tasksEl.appendChild(row);
         };
         const onUp = () => {
-          handle.removeEventListener('pointermove', onMove);
-          handle.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
           row.classList.remove('t-dragging');
           interacting = false;
           if (!moved) return;
           const order = [...tasksEl.querySelectorAll('.task')].map((r) => r.dataset.task);
           op({ op: 'reorderTasks', jobId: j.id, order });
         };
-        handle.addEventListener('pointermove', onMove);
-        handle.addEventListener('pointerup', onUp);
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
       });
     });
 

@@ -393,9 +393,12 @@ TT.pages.features = async function (main, project) {
         const row = handle.closest('.task');
         interacting = true;
         row.classList.add('t-dragging');
+        // 커서가 행을 잡은 지점(행 상단 기준 오프셋, 화면 px)
+        const grabOffsetY = e.clientY - row.getBoundingClientRect().top;
         let moved = false;
 
-        // DOM 재삽입 시 pointer capture가 풀리므로 document에 리스너를 붙인다
+        // 잡은 행을 커서 아래에 띄우고, 나머지는 그 자리로 흘러들어가게 한다.
+        // DOM 재삽입 시 pointer capture가 풀리므로 document에 리스너를 붙인다.
         const onMove = (ev) => {
           moved = true;
           const others = [...tasksEl.querySelectorAll('.task:not(.t-dragging)')];
@@ -405,11 +408,16 @@ TT.pages.features = async function (main, project) {
           });
           if (next) tasksEl.insertBefore(row, next);
           else tasksEl.appendChild(row);
+          // 잡은 행이 커서를 따라오게 (world scale 보정)
+          row.style.transform = 'none';
+          const natTop = row.getBoundingClientRect().top;
+          row.style.transform = `translateY(${(ev.clientY - grabOffsetY - natTop) / view.z}px)`;
         };
         const onUp = () => {
           document.removeEventListener('pointermove', onMove);
           document.removeEventListener('pointerup', onUp);
           row.classList.remove('t-dragging');
+          row.style.transform = '';
           interacting = false;
           if (!moved) return;
           const order = [...tasksEl.querySelectorAll('.task')].map((r) => r.dataset.task);

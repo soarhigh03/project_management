@@ -361,7 +361,12 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
 .task:hover .t-drag { visibility: visible; }
 .task .t-drag:hover { color: var(--text-dim); }
 .task .t-drag:active { cursor: grabbing; }
-.task.t-dragging { background: rgba(168,163,246,.14); opacity: .85; }
+.task.t-dragging {
+  position: relative; z-index: 30; cursor: grabbing;
+  background: var(--bg2); outline: 1px solid var(--lilac); outline-offset: -1px;
+  box-shadow: 0 8px 20px rgba(0,0,0,.45); border-radius: 7px;
+}
+.task.t-dragging .t-drag { visibility: visible; color: var(--lilac); }
 .task input[type="checkbox"] {
   appearance: none; width: 16px; height: 16px; flex: none; margin: 0;
   border: 1.5px solid var(--border2); border-radius: 6px; cursor: pointer;

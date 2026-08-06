@@ -353,6 +353,15 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
 .tasks { padding: 7px 8px 2px; display: flex; flex-direction: column; gap: 2px; }
 .task { display: flex; align-items: center; gap: 7px; padding: 4px 5px; border-radius: 7px; }
 .task:hover { background: rgba(255,255,255,.04); }
+.task .t-drag {
+  flex: none; margin: 0 -3px 0 -2px; padding: 0 2px; font-size: 11px; line-height: 1;
+  color: var(--text-faint); cursor: grab; user-select: none; touch-action: none;
+  visibility: hidden;
+}
+.task:hover .t-drag { visibility: visible; }
+.task .t-drag:hover { color: var(--text-dim); }
+.task .t-drag:active { cursor: grabbing; }
+.task.t-dragging { background: rgba(168,163,246,.14); opacity: .85; }
 .task input[type="checkbox"] {
   appearance: none; width: 16px; height: 16px; flex: none; margin: 0;
   border: 1.5px solid var(--border2); border-radius: 6px; cursor: pointer;

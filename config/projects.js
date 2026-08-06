@@ -14,20 +14,6 @@
 
 export default [
   {
-    id: 'demo',                     // URL에 쓰임: /p/demo/... (소문자·숫자·하이픈)
-    name: '데모 프로젝트',
-    passwordHash: 'scrypt:16384:8:1:870878e0391a6b2cf8941491e6b264ad:4cc9f2b81bf31b20a30b1a354e7de349f2a67a9b92f4e0789b2c299e55fe65af',
-    members: ['미잘', '은우', '팀원A'],
-    regions: ['홈', '검색', '설정', '프로필', '기타'],
-    // urgencies: [
-    //   { id: 'low', name: '낮음' },
-    //   { id: 'mid', name: '보통' },
-    //   { id: 'high', name: '높음' },
-    //   { id: 'critical', name: '긴급' },
-    // ],
-  },
-
-  {
     id: 'patz',
     name: 'patz',
     passwordHash: 'scrypt:16384:8:1:a3107cbc72e79a9de93c081bbbe019fc:ed89a334818401622794c80f389725b55cc5fd167375ced6c7e2d2cb3ca1d4f0',

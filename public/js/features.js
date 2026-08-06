@@ -191,6 +191,7 @@ TT.pages.features = async function (main, project) {
           const st = taskStatus(t);
           return `
           <div class="task s-${st} ${st === 'done' ? 'done' : ''}" data-task="${t.id}">
+            <span class="t-drag" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${st === 'done' ? 'checked' : ''} title="완료 체크">
             <span class="t-title" title="더블클릭으로 수정">${TT.esc(t.title)}</span>
             <select class="t-status s-${st}" title="진행 상태">${taskStatusOptions(st)}</select>
@@ -378,8 +379,44 @@ TT.pages.features = async function (main, project) {
       };
       // 태스크 어디를 더블클릭해도 편집 (컨트롤 요소는 제외)
       tEl.addEventListener('dblclick', (e) => {
-        if (e.target.closest('input, select, button')) return;
+        if (e.target.closest('input, select, button, .t-drag')) return;
         startTaskEdit(e);
+      });
+    });
+
+    // ----- 태스크 순서 변경 (드래그 핸들) -----
+    const tasksEl = el.querySelector('.tasks');
+    el.querySelectorAll('.t-drag').forEach((handle) => {
+      handle.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const row = handle.closest('.task');
+        interacting = true;
+        row.classList.add('t-dragging');
+        handle.setPointerCapture(e.pointerId);
+        let moved = false;
+
+        const onMove = (ev) => {
+          moved = true;
+          const others = [...tasksEl.querySelectorAll('.task:not(.t-dragging)')];
+          const next = others.find((r) => {
+            const rect = r.getBoundingClientRect();
+            return ev.clientY < rect.top + rect.height / 2;
+          });
+          if (next) tasksEl.insertBefore(row, next);
+          else tasksEl.appendChild(row);
+        };
+        const onUp = () => {
+          handle.removeEventListener('pointermove', onMove);
+          handle.removeEventListener('pointerup', onUp);
+          row.classList.remove('t-dragging');
+          interacting = false;
+          if (!moved) return;
+          const order = [...tasksEl.querySelectorAll('.task')].map((r) => r.dataset.task);
+          op({ op: 'reorderTasks', jobId: j.id, order });
+        };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
       });
     });
 

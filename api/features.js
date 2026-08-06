@@ -1,7 +1,7 @@
 // 기능 그래프 API (요청마다 ?project= 필수, 세션 검증)
 // GET  /api/features?project=x → { jobs, edges }
 // POST /api/features?project=x → { op, ... } 뮤테이션 후 최신 그래프 반환
-//   op: addJob | updateJob | deleteJob | addTask | updateTask | deleteTask | addEdge | deleteEdge
+//   op: addJob | updateJob | deleteJob | addTask | updateTask | deleteTask | reorderTasks | addEdge | deleteEdge
 import { route, readJson, json } from '../lib/http.js';
 import { requireProject } from '../lib/auth.js';
 import * as store from '../lib/store.js';
@@ -27,6 +27,7 @@ export default route({
         case 'addTask': await store.addTask(p, body.jobId, body); break;
         case 'updateTask': await store.updateTask(p, body.jobId, body.taskId, body); break;
         case 'deleteTask': await store.deleteTask(p, body.jobId, body.taskId); break;
+        case 'reorderTasks': await store.reorderTasks(p, body.jobId, body.order); break;
         case 'addEdge': await store.addEdge(p, body.from, body.to); break;
         case 'deleteEdge': await store.deleteEdge(p, body.edgeId); break;
         default: return json(res, 400, { error: '알 수 없는 작업입니다: ' + body.op });

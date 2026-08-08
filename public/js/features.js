@@ -17,6 +17,13 @@ TT.pages.features = async function (main, project) {
   ];
   const taskWidth = (j) => j.width || NODE_W;
 
+  // 담당자별 노드 색: 팀원 순서대로 팔레트 색을 배정 (팀당 최대 4~5명)
+  const PERSON_SLOTS = 5;
+  const personVar = (name) => {
+    const i = name ? project.members.indexOf(name) : -1;
+    return i < 0 ? null : `var(--person-${i % PERSON_SLOTS})`;
+  };
+
   let jobs = [];   // {id,title,assignee,x,y,width,tasks:[{id,title,assignee,status,done}]}
   let edges = [];  // {id,from,to}
   const view = { x: 60, y: 40, z: 1 };
@@ -33,6 +40,7 @@ TT.pages.features = async function (main, project) {
         <button class="btn primary" id="addJob">+ 작업 추가</button>
         <button class="btn" id="fitBtn">화면 맞춤</button>
         <span class="feat-hint">빈 곳 더블클릭: 작업 추가 · 오른쪽 점→왼쪽 점 드래그: 의존성 연결 · 선 클릭: 연결 삭제 · 휠: 확대/축소</span>
+        <div class="member-legend" id="memberLegend"></div>
       </div>
       <div class="canvas" id="canvas">
         <div class="world" id="world">
@@ -48,6 +56,13 @@ TT.pages.features = async function (main, project) {
   const world = main.querySelector('#world');
   const edgeSvg = main.querySelector('#edgeSvg');
   const nodesEl = main.querySelector('#nodes');
+
+  // 담당자 색상 범례 (색 ↔ 이름 매핑)
+  const legendEl = main.querySelector('#memberLegend');
+  legendEl.innerHTML =
+    project.members.map((m, i) =>
+      `<span class="lg-item"><span class="lg-dot" style="background:var(--person-${i % 5})"></span>${TT.esc(m)}</span>`).join('') +
+    `<span class="lg-item"><span class="lg-dot lg-none"></span>미지정</span>`;
 
   const jobById = (id) => jobs.find((j) => j.id === id);
   const taskStatus = (t) => t.status || (t.done ? 'done' : 'todo');
@@ -146,11 +161,12 @@ TT.pages.features = async function (main, project) {
   }
 
   // ---------- 노드 그리기 ----------
-  function jobBadge(j) {
+  // 상단 칩 = 진행도/상태 (노드 전체 색과 분리해 완료 여부를 이 색으로만 표시)
+  function jobBadge(j, pct) {
     if (jobDone(j)) return '<span class="job-badge b-done">완료</span>';
     if (jobBlocked(j)) return '<span class="job-badge b-blocked">선행 대기</span>';
-    if (j.tasks.some((t) => t.done)) return '<span class="job-badge b-ready">진행 중</span>';
-    return '<span class="job-badge b-ready">시작 전</span>';
+    if (j.tasks.some((t) => taskStatus(t) === 'done')) return `<span class="job-badge b-doing">진행 ${pct}%</span>`;
+    return '<span class="job-badge b-todo">시작 전</span>';
   }
 
   function memberOptions(sel) {
@@ -167,6 +183,9 @@ TT.pages.features = async function (main, project) {
     el.dataset.id = j.id;
     const doneCount = j.tasks.filter((t) => taskStatus(t) === 'done').length;
     const pct = j.tasks.length ? Math.round((doneCount / j.tasks.length) * 100) : 0;
+    // 노드 전체 색 = 담당자 색 (미지정이면 중립색 유지)
+    const pc = personVar(j.assignee);
+    if (pc) el.style.setProperty('--pc', pc);
 
     const taskStatusOptions = (cur) =>
       TASK_STATES.map((s) => `<option value="${s.id}" ${s.id === cur ? 'selected' : ''}>${s.name}</option>`).join('');
@@ -178,7 +197,7 @@ TT.pages.features = async function (main, project) {
       <div class="job-resize right" title="오른쪽으로 늘리기"></div>
       <div class="job-head">
         <span class="job-title" title="클릭 또는 더블클릭으로 이름 변경">${TT.esc(j.title)}</span>
-        ${jobBadge(j)}
+        ${jobBadge(j, pct)}
         <button class="job-edit" title="이름 변경">✎</button>
         <button class="job-x" title="작업 삭제">✕</button>
       </div>

@@ -40,6 +40,14 @@
   --s-waiting: var(--pink);
   --s-done:    var(--lemon);
 
+  /* 담당자 팔레트 — 팀원 순서대로 배정 (팀당 최대 4~5명) */
+  --person-0: #a8a3f6;   /* 라일락 */
+  --person-1: #f6a5d0;   /* 로즈 */
+  --person-2: #8fd6a6;   /* 민트 */
+  --person-3: #8ec5ff;   /* 스카이 */
+  --person-4: #f4c26b;   /* 앰버 */
+  --person-none: #6a6a80;/* 미지정 */
+
   --radius: 14px;
   --radius-lg: 20px;
   --shadow: 0 14px 40px rgba(0, 0, 0, .55);
@@ -267,6 +275,10 @@ tr.bug-done .bug-title { text-decoration: line-through; }
   flex-wrap: wrap;
 }
 .feat-hint { color: var(--text-faint); font-size: 12px; }
+.member-legend { display: flex; align-items: center; gap: 12px; margin-left: auto; flex-wrap: wrap; }
+.member-legend .lg-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-dim); }
+.member-legend .lg-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.3); }
+.member-legend .lg-dot.lg-none { background: var(--person-none); }
 
 .canvas {
   flex: 1; position: relative; overflow: hidden; cursor: grab;
@@ -289,14 +301,24 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
 }
 
 .job {
+  --pc: var(--border2);   /* 담당자 색 (미지정 = 중립) */
   position: absolute; width: 244px; background: rgba(22,22,31,.97);
   border: 1px solid var(--border2); border-radius: var(--radius);
+  border-color: color-mix(in srgb, var(--pc) 55%, var(--border2));
   box-shadow: 0 10px 28px rgba(0,0,0,.55);
   user-select: none;
   backdrop-filter: blur(4px);
 }
-.job.blocked { border-color: rgba(255, 139, 139, .5); }
-.job.done { border-color: rgba(248, 255, 161, .55); }
+/* 왼쪽 담당자 색 스파인 */
+.job::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--pc); opacity: .9; z-index: 3; pointer-events: none;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+/* 완료: 색조(담당자)는 유지하되 전체를 어둡게 눌러 "끝난 노드"로 보이게 */
+.job.done { opacity: .58; }
+/* 선행 대기: 담당자 색은 그대로 두고 붉은 내부 링만 덧대 경고 */
+.job.blocked { box-shadow: 0 10px 28px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,139,139,.45); }
 .job.dragging { opacity: .9; z-index: 20; box-shadow: 0 18px 40px rgba(0,0,0,.65); }
 .job.resizing { z-index: 20; box-shadow: 0 18px 40px rgba(168, 163, 246, .35); }
 
@@ -318,10 +340,10 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
   padding: 10px 13px; cursor: grab;
   box-shadow: inset 0 -1px 0 var(--border);
   border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
-  background: linear-gradient(180deg, rgba(168,163,246,.18), rgba(168,163,246,.04));
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--pc) 20%, transparent),
+    color-mix(in srgb, var(--pc) 5%, transparent));
 }
-.job.done .job-head { background: linear-gradient(180deg, rgba(248,255,161,.15), rgba(248,255,161,.03)); }
-.job.blocked .job-head { background: linear-gradient(180deg, rgba(255,139,139,.14), rgba(255,139,139,.03)); }
 .job-title { font-weight: 700; font-size: 13.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.1px; }
 .job-title-input {
   width: 100%; padding: 4px 8px; font-size: 13px;
@@ -334,7 +356,8 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
 .job-badge { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; flex: none; letter-spacing: .2px; }
 .job-badge.b-done { background: rgba(248,255,161,.15); color: var(--lemon); }
 .job-badge.b-blocked { background: rgba(255,139,139,.18); color: var(--red); }
-.job-badge.b-ready { background: rgba(168,163,246,.14); color: var(--lilac); }
+.job-badge.b-doing { background: rgba(168,163,246,.16); color: var(--lilac); }
+.job-badge.b-todo { background: rgba(124,135,152,.16); color: var(--s-todo); }
 .job-x {
   border: none; background: none; color: var(--text-faint); cursor: pointer;
   font-size: 14px; padding: 0 2px; flex: none; line-height: 1;
@@ -402,7 +425,7 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
 }
 
 .progress { height: 4px; background: #0e0e15; border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
-.progress > div { height: 100%; background: linear-gradient(90deg, var(--lilac), var(--pink)); transition: width .25s; }
+.progress > div { height: 100%; background: var(--pc); transition: width .25s; }
 
 .port {
   position: absolute; width: 14px; height: 14px; border-radius: 50%;

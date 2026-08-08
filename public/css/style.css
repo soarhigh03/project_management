@@ -309,16 +309,13 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
   user-select: none;
   backdrop-filter: blur(4px);
 }
-/* 왼쪽 담당자 색 스파인 */
+/* 왼쪽 담당자 색 띠 — 노드 테두리(라운드/높이)에 정확히 겹쳐 그림 */
 .job::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-  background: var(--pc); opacity: .9; z-index: 3; pointer-events: none;
-  border-radius: var(--radius) 0 0 var(--radius);
+  content: ''; position: absolute; inset: -1px; z-index: 3; pointer-events: none;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--pc);
 }
-/* 완료: 색조(담당자)는 유지하되 전체를 어둡게 눌러 "끝난 노드"로 보이게 */
-.job.done { opacity: .58; }
-/* 선행 대기: 담당자 색은 그대로 두고 붉은 내부 링만 덧대 경고 */
-.job.blocked { box-shadow: 0 10px 28px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,139,139,.45); }
+/* 상태(완료/선행 대기 등)는 상단 칩으로만 표시 — 노드 가장자리 색은 쓰지 않음 */
 .job.dragging { opacity: .9; z-index: 20; box-shadow: 0 18px 40px rgba(0,0,0,.65); }
 .job.resizing { z-index: 20; box-shadow: 0 18px 40px rgba(168, 163, 246, .35); }
 
@@ -435,7 +432,6 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
 .port:hover, .port.hot { transform: scale(1.35); border-color: var(--lilac); }
 .port.in { left: -8px; }
 .port.out { right: -8px; border-color: var(--accent-dim); }
-.job.done .port.out { border-color: var(--lemon); }
 
 /* ---------- 스크린샷 첨부 ---------- */
 .lbl-hint { font-weight: 400; color: var(--text-faint); font-size: 11px; margin-left: 4px; }

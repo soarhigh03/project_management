@@ -33,6 +33,11 @@ function mdRender(src) {
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>')
+      // 이미지 ![alt](src) — 링크보다 먼저 처리 (링크 문법을 포함하므로)
+      .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) => {
+        if (!/^(https?:|\/|data:image\/)/.test(url)) return '';
+        return `<img class="md-img" src="${url}" alt="${alt}" loading="lazy">`;
+      })
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, txt, url) => {
         const safe = /^(https?:|\/|#)/.test(url) ? url : '#';
         return `<a href="${safe}" target="_blank" rel="noopener">${txt}</a>`;
@@ -85,6 +90,36 @@ function mdRender(src) {
 
   // 코드 블록 복원
   return out.join('\n').replace(/\x00CODE(\d+)\x00/g, (_, i) => codes[+i]);
+}
+
+// ---------- 이미지 압축 (긴 변 축소 + JPEG 품질 다운) ----------
+async function compressImage(file, { maxSide = 1600, quality = 0.82 } = {}) {
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('파일을 읽을 수 없습니다.'));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error('이미지를 열 수 없습니다.'));
+    i.src = dataUrl;
+  });
+  let { width, height } = img;
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  width = Math.round(width * scale);
+  height = Math.round(height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  let q = quality;
+  let out = canvas.toDataURL('image/jpeg', q);
+  while (out.length > 700 * 1024 && q > 0.4) {
+    q -= 0.1;
+    out = canvas.toDataURL('image/jpeg', q);
+  }
+  return out;
 }
 
 // ---------- 페이지 ----------
@@ -220,7 +255,7 @@ TT.pages.meetings = async function (main, project) {
           <span class="meet-status" id="meetStatus">불러옴</span>
         </div>
         <div class="meet-editor">
-          <textarea id="mdSrc" class="md-src" placeholder="# 회의 안건&#10;&#10;- 논의 사항&#10;- 결정 사항&#10;"></textarea>
+          <textarea id="mdSrc" class="md-src" placeholder="# 회의 안건&#10;&#10;- 논의 사항&#10;- 결정 사항&#10;&#10;이미지는 붙여넣기(⌘/Ctrl+V)나 드래그로 첨부"></textarea>
           <div id="mdPrev" class="md-prev"></div>
         </div>
       </div>`;
@@ -303,6 +338,46 @@ TT.pages.meetings = async function (main, project) {
       prevEl.innerHTML = mdRender(srcEl.value);
       setStatus('편집 중…', 'editing');
       scheduleSave();
+    });
+
+    // ---------- 이미지 붙여넣기 / 드래그-드롭 ----------
+    function insertAtCursor(text) {
+      const s = srcEl.selectionStart, e = srcEl.selectionEnd;
+      srcEl.value = srcEl.value.slice(0, s) + text + srcEl.value.slice(e);
+      const pos = s + text.length;
+      srcEl.focus();
+      srcEl.setSelectionRange(pos, pos);
+      srcEl.dispatchEvent(new Event('input')); // 미리보기 갱신 + 자동 저장 예약
+    }
+    async function uploadImage(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+      setStatus('이미지 업로드 중…', 'saving');
+      try {
+        const dataUrl = await compressImage(file);
+        const { imageId } = await TT.api('POST', `/api/meetings?project=${project.id}`, { image: dataUrl });
+        insertAtCursor(`\n![](/api/meetings?project=${project.id}&imageId=${imageId})\n`);
+        setStatus('이미지 삽입됨', 'ok');
+      } catch (ex) {
+        setStatus(ex.message || '이미지 업로드 실패', 'err');
+      }
+    }
+    srcEl.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of items) {
+        if (it.type && it.type.startsWith('image/')) {
+          const f = it.getAsFile();
+          if (f) { e.preventDefault(); uploadImage(f); break; }
+        }
+      }
+    });
+    ['dragenter', 'dragover'].forEach((ev) => srcEl.addEventListener(ev, (e) => {
+      if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); srcEl.classList.add('drag'); }
+    }));
+    ['dragleave', 'dragend', 'drop'].forEach((ev) => srcEl.addEventListener(ev, () => srcEl.classList.remove('drag')));
+    srcEl.addEventListener('drop', (e) => {
+      const f = e.dataTransfer?.files?.[0];
+      if (f && f.type.startsWith('image/')) { e.preventDefault(); uploadImage(f); }
     });
 
     // 폴링: 로컬이 clean이고 최근 타이핑 없으면 서버 버전 반영

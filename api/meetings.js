@@ -13,6 +13,21 @@ export default route({
   async GET(req, res) {
     const project = requireProject(req, res);
     if (!project) return;
+
+    // 본문에 삽입된 이미지 원본 서빙 (<img src>에서 직접 로드)
+    const imageId = query(req).get('imageId');
+    if (imageId) {
+      const dataUrl = await store.getScreenshot(project.id, imageId);
+      const m = dataUrl && /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
+      if (!m) return json(res, 404, { error: '이미지를 찾을 수 없습니다.' });
+      const buf = Buffer.from(m[2], 'base64');
+      res.statusCode = 200;
+      res.setHeader('Content-Type', m[1]);
+      res.setHeader('Content-Length', buf.length);
+      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+      return res.end(buf);
+    }
+
     const id = query(req).get('id');
     if (id) {
       const m = await store.getMeeting(project.id, id);
@@ -26,6 +41,18 @@ export default route({
     const project = requireProject(req, res);
     if (!project) return;
     const body = await readJson(req);
+
+    // 이미지 업로드: { image: dataUrl } → { imageId }
+    if (body && typeof body.image === 'string') {
+      try {
+        const imageId = await store.saveImage(project.id, body.image);
+        return json(res, 201, { imageId });
+      } catch (err) {
+        if (err && err.status === 400) return json(res, 400, { error: err.message });
+        throw err;
+      }
+    }
+
     const meeting = await store.createMeeting(project.id, body || {});
     json(res, 201, { meeting });
   },

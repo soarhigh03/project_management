@@ -219,8 +219,7 @@ TT.pages.features = async function (main, project) {
           </div>`;
         }).join('')}
       </div>
-      <div class="job-add"><input type="text" placeholder="+ 할 일 추가 (Enter)" maxlength="300"></div>
-      <div class="progress"><div style="width:${pct}%"></div></div>`;
+      <div class="job-add"><input type="text" placeholder="+ 할 일 추가 (Enter)" maxlength="300"></div>`;
 
     // ----- 리사이즈 핸들 (좌/우) -----
     el.querySelectorAll('.job-resize').forEach((handle) => {

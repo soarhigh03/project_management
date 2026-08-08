@@ -421,8 +421,6 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
   background: rgba(255,255,255,.03); border-style: dashed;
 }
 
-.progress { height: 4px; background: #0e0e15; border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
-.progress > div { height: 100%; background: var(--pc); transition: width .25s; }
 
 .port {
   position: absolute; width: 14px; height: 14px; border-radius: 50%;

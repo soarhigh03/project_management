@@ -39,7 +39,7 @@ TT.pages.features = async function (main, project) {
       <div class="feat-toolbar">
         <button class="btn primary" id="addJob">+ 작업 추가</button>
         <button class="btn" id="fitBtn">화면 맞춤</button>
-        <span class="feat-hint">빈 곳 더블클릭: 작업 추가 · 오른쪽 점→왼쪽 점 드래그: 의존성 연결 · 선 클릭: 연결 삭제 · 휠: 확대/축소</span>
+        <span class="toggle-chip" id="fMine">내 담당만</span>
         <div class="member-legend" id="memberLegend"></div>
       </div>
       <div class="canvas" id="canvas">
@@ -63,6 +63,14 @@ TT.pages.features = async function (main, project) {
     project.members.map((m, i) =>
       `<span class="lg-item"><span class="lg-dot" style="background:var(--person-${i % 5})"></span>${TT.esc(m)}</span>`).join('') +
     `<span class="lg-item"><span class="lg-dot lg-none"></span>미지정</span>`;
+
+  // ---- "내 담당만" 필터 ----
+  let mineOnly = false;
+  const isMine = (j) => {
+    const me = TT.me();
+    return !!me && (j.assignee === me || j.tasks.some((t) => t.assignee === me));
+  };
+  const jobHidden = (j) => mineOnly && !!TT.me() && !isMine(j);
 
   const jobById = (id) => jobs.find((j) => j.id === id);
   const taskStatus = (t) => t.status || (t.done ? 'done' : 'todo');
@@ -118,6 +126,7 @@ TT.pages.features = async function (main, project) {
     for (const e of edges) {
       const from = jobById(e.from), to = jobById(e.to);
       if (!from || !to) continue;
+      if (jobHidden(from) || jobHidden(to)) continue;
       const d = bezier(portPos(from, 'out'), portPos(to, 'in'));
       const cls = [jobDone(from) ? 'done' : '', selEdge === e.id ? 'sel' : ''].join(' ');
       html += `<g class="${cls}" data-edge="${e.id}">
@@ -480,14 +489,21 @@ TT.pages.features = async function (main, project) {
 
   function render() {
     nodesEl.innerHTML = '';
-    for (const j of jobs) nodesEl.appendChild(renderJob(j));
+    for (const j of jobs) {
+      const el = renderJob(j);
+      if (jobHidden(j)) el.style.display = 'none';
+      nodesEl.appendChild(el);
+    }
     renderEdges();
     applyView();
-    if (jobs.length === 0) {
+    const anyVisible = jobs.some((j) => !jobHidden(j));
+    if (!anyVisible) {
       const note = document.createElement('div');
       note.className = 'empty-note';
       note.style.cssText = 'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:max-content';
-      note.innerHTML = '아직 작업이 없습니다.<br>“+ 작업 추가” 버튼이나 빈 곳 더블클릭으로 시작하세요.';
+      note.innerHTML = jobs.length
+        ? '내가 담당한 작업이 없습니다.<br>“내 담당만”을 끄면 전체 작업이 보입니다.'
+        : '아직 작업이 없습니다.<br>“+ 작업 추가” 버튼이나 빈 곳 더블클릭으로 시작하세요.';
       nodesEl.appendChild(note);
     }
     if (focusAddJob) {
@@ -573,6 +589,16 @@ TT.pages.features = async function (main, project) {
     applyView();
   };
 
+  const fMine = main.querySelector('#fMine');
+  fMine.onclick = () => {
+    mineOnly = !mineOnly;
+    fMine.classList.toggle('on', mineOnly);
+    if (mineOnly && !TT.me()) TT.toast('상단에서 “나”를 먼저 선택하세요');
+    render();
+  };
+  const onMe = () => { if (mineOnly) render(); };
+  document.addEventListener('tt:me-changed', onMe);
+
   // ---------- 로드 + 폴링 ----------
   await load();
   if (jobs.length) main.querySelector('#fitBtn').click();
@@ -583,5 +609,8 @@ TT.pages.features = async function (main, project) {
     load();
   }, 15000);
 
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    document.removeEventListener('tt:me-changed', onMe);
+  };
 };

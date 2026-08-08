@@ -327,8 +327,8 @@ svg.edges g.sel path.edge-line { stroke: var(--lilac); stroke-width: 3; }
   background: transparent;
   transition: background .15s;
 }
-.job-resize.left  { left: -4px; }
-.job-resize.right { right: -4px; }
+.job-resize.left  { left: 0; }
+.job-resize.right { right: 0; }
 .job:hover .job-resize { background: rgba(168, 163, 246, .16); }
 .job-resize:hover, .job.resizing .job-resize { background: var(--lilac) !important; }
 

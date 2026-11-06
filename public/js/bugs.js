@@ -118,44 +118,9 @@ TT.pages.bugs = async function (main, project) {
     });
   }
 
-  // ---------- 스크린샷 유틸 ----------
-  async function compressImage(file, { maxSide = 1600, quality = 0.82 } = {}) {
-    const dataUrl = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.onerror = () => rej(new Error('파일을 읽을 수 없습니다.'));
-      r.readAsDataURL(file);
-    });
-    const img = await new Promise((res, rej) => {
-      const i = new Image();
-      i.onload = () => res(i);
-      i.onerror = () => rej(new Error('이미지를 열 수 없습니다.'));
-      i.src = dataUrl;
-    });
-    let { width, height } = img;
-    const scale = Math.min(1, maxSide / Math.max(width, height));
-    width = Math.round(width * scale);
-    height = Math.round(height * scale);
-    const canvas = document.createElement('canvas');
-    canvas.width = width; canvas.height = height;
-    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-    let q = quality;
-    let out = canvas.toDataURL('image/jpeg', q);
-    // 800KB 상한 근접까지 품질 다운
-    while (out.length > 700 * 1024 && q > 0.4) {
-      q -= 0.1;
-      out = canvas.toDataURL('image/jpeg', q);
-    }
-    return out;
-  }
-
-  function openLightbox(src) {
-    const bg = document.createElement('div');
-    bg.className = 'lightbox';
-    bg.innerHTML = `<img src="${src}" alt="스크린샷"><button class="lightbox-close" title="닫기">✕</button>`;
-    bg.onclick = () => bg.remove();
-    document.body.appendChild(bg);
-  }
+  // ---------- 스크린샷 유틸 (공용 헬퍼 래퍼) ----------
+  const compressImage = (file) => TT.compressImage(file);
+  const openLightbox = (src) => TT.lightbox(src);
 
   // ---------- 생성/수정 모달 ----------
   function openModal(bug) {

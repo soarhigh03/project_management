@@ -56,14 +56,22 @@ test('tasks retain nested todos, assignment, status, stable order and reject sta
   await db.deleteRecord('tasks',c.id);
   await assert.rejects(db.updateRecord('tasks',c.id,{title:'resurrect'}),{status:404});
 });
-test('vault encrypts credentials and card numbers, list only returns masked data',async()=>{
+test('vault keeps card details encrypted while exposing only the full number in lists',async()=>{
   const a=await db.createRecord('accounts',{title:'gmail',username:'team@example.test',password:'  secret-one  '});
-  const c=await db.createRecord('accounts',{kind:'card',title:'팀 카드',number:'4111 1111 1111 1111',holder:'팀',expiry:'12/29'});
+  const c=await db.createRecord('accounts',{kind:'card',title:'팀 카드',number:'4111 1111 1111 1111',holder:'팀',expiry:'12/29',memo:'987'});
   const disk=await fs.readFile(process.env.TT_DATA_FILE,'utf8');
   assert.ok(!disk.includes('secret-one'));assert.ok(!disk.includes('4111111111111111'));
   assert.equal((await db.revealAccount(a.id)).password,'  secret-one  ');
-  assert.equal(c.summary,'•••• 1111');
+  assert.equal(c.summary,'4111111111111111');
   const all=await db.getDashboard();assert.ok(!JSON.stringify(all).includes('secret-one'));assert.ok(!('secret' in all.accounts[0]));
+  const listedCard=all.accounts.find(account=>account.id===c.id);
+  assert.equal(listedCard.summary,'4111111111111111');
+  assert.ok(!('expiry' in listedCard));assert.ok(!('memo' in listedCard));
+  const storedCard=JSON.parse(await kv.hget('tt:patz:dashboard:accounts',c.id));
+  assert.equal(storedCard.summary,'•••• 1111');
+  assert.ok(!('expiry' in storedCard));assert.ok(!('memo' in storedCard));
+  const details=await (await request('POST','/api/dashboard?project=patz',{action:'reveal',id:c.id})).json();
+  assert.equal(details.secret.expiry,'12/29');assert.equal(details.secret.memo,'987');
   await db.updateRecord('accounts',a.id,{title:'Gmail'});
   assert.equal((await db.revealAccount(a.id)).password,'  secret-one  ');
 });

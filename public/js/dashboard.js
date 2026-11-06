@@ -57,7 +57,7 @@ function renderShared() {
   if (nextAccountRevision !== accountRevision) {
     hideSecrets();
     accountRevision = nextAccountRevision;
-    setHTML('accounts', data.accounts.map(a => `<article class="account-row row-rule" data-account="${a.id}"><button class="account-name" data-edit="accounts" data-id="${a.id}" title="계정 정보 수정">${esc(a.title)}${a.kind === 'card' ? '<sup class="account-kind">CARD</sup>' : ''}</button><div class="account-details"><button class="account-id" data-edit="accounts" data-id="${a.id}" title="정보 수정">${esc(a.summary)}</button><div class="account-secret"><span class="masked">**************</span><button class="icon-button" data-reveal="${a.id}" aria-pressed="false" aria-label="${esc(a.title)} ${a.kind === 'card' ? '카드 번호' : '비밀번호'} 표시"><img src="/assets/figma/eye.png" alt=""></button><button class="icon-button" data-copy="${a.id}" aria-label="${esc(a.title)} ${a.kind === 'card' ? '카드 번호' : '비밀번호'} 복사"><img src="/assets/figma/copy.png" alt=""></button></div></div></article>`).join('') || empty('팀에서 사용하는 계정이나 카드를 추가하세요.', 'accounts'));
+    setHTML('accounts', data.accounts.map(a => `<article class="account-row row-rule" data-account="${a.id}"><button class="account-name" data-edit="accounts" data-id="${a.id}" title="계정 정보 수정">${esc(a.title)}${a.kind === 'card' ? '<sup class="account-kind">CARD</sup>' : ''}</button><div class="account-details"><button class="account-id" data-edit="accounts" data-id="${a.id}" title="정보 수정">${esc(a.kind === 'card' ? a.summary.replace(/(.{4})(?=.)/g, '$1 ') : a.summary)}</button><div class="account-secret"><span class="masked">**************</span><button class="icon-button" data-reveal="${a.id}" aria-pressed="false" aria-label="${esc(a.title)} ${a.kind === 'card' ? '유효기간 및 CVC' : '비밀번호'} 표시"><img src="/assets/figma/eye.png" alt=""></button><button class="icon-button" data-copy="${a.id}" aria-label="${esc(a.title)} ${a.kind === 'card' ? '유효기간 및 CVC' : '비밀번호'} 복사"><img src="/assets/figma/copy.png" alt=""></button></div></div></article>`).join('') || empty('팀에서 사용하는 계정이나 카드를 추가하세요.', 'accounts'));
   }
 }
 function render() { renderSchedules(); renderTasks(); renderShared(); }
@@ -129,7 +129,17 @@ async function openForm(type, record = null, focus = 'title') {
     $('.subtask-fields',dialog).onclick = e => { if(e.target.closest('[data-remove-sub]')) e.target.closest('.subtask-field').remove(); };
   }
   if (type === 'accounts') {
-    const toggle = () => { const card = form.elements.kind.value === 'card'; $('#accountFields').hidden = card; $('#cardFields').hidden = !card; for(const el of $$('#accountFields input')) el.disabled = card; for(const el of $$('#cardFields input')) el.disabled = !card; };
+    const toggle = () => {
+      const card = form.elements.kind.value === 'card';
+      $('#accountFields').hidden = card; $('#cardFields').hidden = !card;
+      for(const el of $$('#accountFields input')) el.disabled = card;
+      for(const el of $$('#cardFields input')) el.disabled = !card;
+      const memo = form.elements.memo;
+      $('span', memo.closest('.field')).textContent = card ? 'CVC (메모)' : '메모';
+      memo.type = card ? 'password' : 'text';
+      memo.autocomplete = 'off';
+      memo.placeholder = card ? '카드 보안코드' : '';
+    };
     form.elements.kind.onchange = toggle; toggle();
   }
   if (type === 'expenses') { const total = () => $('#expenseTotal').textContent = `총 지출 ${money(Number(form.elements.quantity.value) * Number(form.elements.unitPrice.value))} · 세 프로젝트 공용 예산`; form.oninput = total; total(); }
@@ -214,12 +224,12 @@ async function secretAction(id, copy) {
   if (!copy && masked.dataset.revealed) { maskSecret(row); return; }
   button.disabled = true;
   try {
-    const valuePromise = TT.api('POST', API, { action:'reveal', id }).then(({ secret }) => (account.kind === 'card' ? secret.number : secret.password) || '');
+    const valuePromise = TT.api('POST', API, { action:'reveal', id }).then(({ secret }) => account.kind === 'card' ? `${secret.expiry || 'MM/YY 없음'} · CVC ${secret.memo || '없음'}` : secret.password || '');
     if (copy) { await copySecret(valuePromise); TT.toast('복사했습니다.'); }
     else {
       const value = await valuePromise;
       if (!row.isConnected || document.hidden || !document.hasFocus()) return;
-      masked.textContent = value || (account.kind === 'card' ? '(카드 번호 없음)' : '(비밀번호 없음)');
+      masked.textContent = value || (account.kind === 'card' ? '(유효기간·CVC 없음)' : '(비밀번호 없음)');
       masked.dataset.revealed = 'true';
       button.setAttribute('aria-pressed', 'true');
       button.setAttribute('aria-label', button.getAttribute('aria-label').replace(/ 표시$/, ' 숨기기'));

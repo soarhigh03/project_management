@@ -23,11 +23,16 @@ function filteredTasks() {
   const project = $('#projectFilter').value, assignee = $('#assigneeFilter').value, status = $('#statusFilter').value;
   return data.tasks.filter(t => (project === 'all' || t.project === project) && (assignee === 'all' || t.assignee === assignee) && (status === 'all' || t.status === status));
 }
+function scheduleLabel(item) {
+  if (scope !== 'all') return esc(item.title);
+  const [, start, ending] = item.title.match(/^([\s\S]*?)(\S{1,16})$/) || ['', '', item.title];
+  return `${esc(start)}<span class="schedule-ending">${esc(ending)}<sup class="schedule-project">${LABELS[item.project]}</sup></span>`;
+}
 function renderSchedules() {
   const groups = new Map();
   const schedules = data.schedules.filter(s => scope === 'all' || s.project === scope);
   for (const item of schedules) { if (!groups.has(item.date)) groups.set(item.date, []); groups.get(item.date).push(item); }
-  setHTML('schedules', [...groups].map(([date, items]) => `<div class="schedule-row row-rule"><div class="date-lockup" title="${esc(date)}"><span class="date-number">${date.slice(8)}</span><span class="date-day">${dayName(date)}</span></div><div class="schedule-items">${items.map(s => `<button class="schedule-item ${s.important ? 'important' : ''}" data-edit="schedules" data-id="${s.id}" aria-label="${esc(s.important ? '중요 일정: ' : '')}${esc(s.title)} 수정">${esc(s.title)}${scope === 'all' ? `<span class="schedule-project">${LABELS[s.project]}</span>` : ''}<span class="edit-mark" aria-hidden="true">↗</span></button>`).join('')}</div></div>`).join('') || empty('등록된 일정이 없습니다.', 'schedules'));
+  setHTML('schedules', [...groups].map(([date, items]) => `<div class="schedule-row row-rule"><div class="date-lockup" title="${esc(date)}"><span class="date-number">${date.slice(8)}</span><span class="date-day">${dayName(date)}</span></div><div class="schedule-items">${items.map(s => `<button class="schedule-item ${s.important ? 'important' : ''}" data-edit="schedules" data-id="${s.id}" aria-label="${esc(s.important ? '중요 일정: ' : '')}${esc(s.title)} 수정">${scheduleLabel(s)}<span class="edit-mark" aria-hidden="true">↗</span></button>`).join('')}</div></div>`).join('') || empty('등록된 일정이 없습니다.', 'schedules'));
 }
 function handleMarkup(taskId, subtaskId = '') { return `<button class="drag-handle" data-drag="${taskId}" ${subtaskId ? `data-subtask="${subtaskId}"` : ''} aria-label="순서 이동. Alt와 위 또는 아래 방향키로도 이동할 수 있습니다." title="드래그해서 순서 이동 · Alt + ↑/↓"><img src="/assets/figma/dots.svg" alt="" draggable="false"></button>`; }
 function renderTasks() {

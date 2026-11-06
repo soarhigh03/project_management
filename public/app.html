@@ -1,35 +1,61 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TaskTrack</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/css/style.css">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f5f5"><title>PATZ DASHBOARD</title>
+  <link rel="preload" href="/assets/fonts/BookkGothic-Bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/dashboard.css">
 </head>
-<body class="preauth">
-  <div class="app">
-    <header class="topbar">
-      <a href="/" class="proj-name" id="projName" title="프로젝트 목록으로">…</a>
-      <nav class="tabs">
-        <div class="tab" data-tab="bugs">버그</div>
-        <div class="tab" data-tab="features">기능</div>
-        <div class="tab" data-tab="meetings">회의록</div>
+<body>
+  <div id="app" class="dashboard-app" aria-busy="true">
+    <header class="masthead">
+      <h1><span id="projectHeading">PATZ</span><br>DASHBOARD</h1>
+      <nav class="project-nav" aria-label="프로젝트">
+        <button data-project="patz" class="active" aria-pressed="true">PATZ</button>
+        <button data-project="room42" aria-pressed="false">room42</button>
+        <button data-project="mandudang" aria-pressed="false">mandudang</button>
+        <button data-project="all" aria-pressed="false">all</button>
       </nav>
-      <div class="spacer"></div>
-      <div class="me-box">
-        <label for="meSelect">나:</label>
-        <select id="meSelect"><option value="">선택 안 함</option></select>
+      <div class="workspace-tools">
+        <label>나 <select id="memberSelect" aria-label="내 이름"><option value="undefined">undefined</option><option>은우</option><option>민우</option><option>채은</option></select></label>
+        <a href="/legacy/p/patz/bugs">이전 UI ↗</a><button id="logout">로그아웃</button><span id="connection" role="status">불러오는 중</span>
       </div>
-      <button class="btn ghost" id="logoutBtn" title="로그아웃">로그아웃</button>
     </header>
-    <main class="main" id="main"></main>
+    <main class="dashboard-grid" id="dashboard">
+      <div class="column left-column">
+        <section class="panel schedule-panel" aria-labelledby="scheduleHeading">
+          <div class="section-heading"><h2 id="scheduleHeading">UPCOMING SCHEDULE</h2><button class="add-button" data-add="schedules" aria-label="일정 추가">+</button></div>
+          <div class="panel-scroll" id="schedules" tabindex="0" aria-label="일정 목록"></div>
+        </section>
+        <section class="panel budget-panel" aria-labelledby="budgetHeading">
+          <div class="section-heading"><h2 id="budgetHeading">BUDGET MANAGEMENT</h2><button class="add-button" data-add="expenses" aria-label="지출 추가">+</button></div>
+          <div class="panel-scroll" id="expenses" tabindex="0" aria-label="지출 내역"></div>
+          <div class="balance"><span>Remaining Balance</span><span id="balance">2,000,000원</span></div>
+        </section>
+      </div>
+      <section class="panel rnr-panel" aria-labelledby="rnrHeading">
+        <div class="section-heading rnr-heading"><h2 id="rnrHeading">RnR</h2>
+          <div class="filter-chips">
+            <select id="projectFilter" aria-label="작업 프로젝트 필터"><option value="all">all</option><option value="patz" selected>PATZ</option><option value="room42">room42</option><option value="mandudang">mandudang</option></select>
+            <select id="assigneeFilter" aria-label="담당자 필터"><option value="all">담당자 all</option><option>은우</option><option>민우</option><option>채은</option><option>undefined</option></select>
+            <select id="statusFilter" aria-label="상태 필터"><option value="not finished">not finished</option><option value="finished">finished</option><option value="all">상태 all</option></select>
+          </div><button class="add-button" data-add="tasks" aria-label="작업 추가">+</button>
+        </div><div class="panel-scroll" id="tasks" tabindex="0" aria-label="작업 목록"></div>
+      </section>
+      <div class="column right-column">
+        <section class="panel meetings-panel" aria-labelledby="meetingsHeading">
+          <div class="section-heading"><h2 id="meetingsHeading">MEETING NOTES</h2><button class="add-button" data-add="notes" aria-label="회의록 추가">+</button></div>
+          <div class="panel-scroll" id="notes" tabindex="0" aria-label="회의록 목록"></div>
+        </section>
+        <section class="panel accounts-panel" aria-labelledby="accountsHeading">
+          <div class="section-heading"><h2 id="accountsHeading">ACCOUNT INFORMATION</h2><button class="add-button" data-add="accounts" aria-label="계정 또는 카드 추가">+</button></div>
+          <div class="panel-scroll" id="accounts" tabindex="0" aria-label="공유 계정과 카드"></div>
+        </section>
+      </div>
+    </main><main id="notePage" class="note-page" hidden></main>
   </div>
-
-  <script src="/js/api.js"></script>
-  <script src="/js/bugs.js"></script>
-  <script src="/js/features.js"></script>
-  <script src="/js/meetings.js"></script>
-  <script src="/js/app.js"></script>
+  <dialog id="editDialog" class="edit-dialog"></dialog><div id="toast" role="status" aria-live="polite"></div>
+  <script src="/js/api.js"></script><script type="module" src="/js/dashboard.js"></script>
 </body>
 </html>

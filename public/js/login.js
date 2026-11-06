@@ -23,7 +23,7 @@
           project: projectId,
           password: document.getElementById('pw').value,
         });
-        location.href = `/p/${projectId}/bugs`;
+        location.href = projectId === 'patz' ? '/p/patz/dashboard' : `/legacy/p/${projectId}/bugs`;
       } catch (ex) {
         err.textContent = ex.message;
         btn.disabled = false;
@@ -67,7 +67,7 @@
         // 이미 로그인된 프로젝트면 바로 입장
         try {
           await TT.api('GET', `/api/auth?project=${encodeURIComponent(p.id)}`);
-          location.href = `/p/${p.id}/bugs`;
+          location.href = p.id === 'patz' ? '/p/patz/dashboard' : `/legacy/p/${p.id}/bugs`;
         } catch {
           pwView(p.id, p.name);
         }

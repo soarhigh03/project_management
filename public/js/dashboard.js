@@ -37,13 +37,13 @@ function renderSchedules() {
 function handleMarkup(taskId, subtaskId = '') { return `<button class="drag-handle" data-drag="${taskId}" ${subtaskId ? `data-subtask="${subtaskId}"` : ''} aria-label="순서 이동. Alt와 위 또는 아래 방향키로도 이동할 수 있습니다." title="드래그해서 순서 이동 · Alt + ↑/↓"><img src="/assets/figma/dots.svg" alt="" draggable="false"></button>`; }
 function renderTasks() {
   const tasks = filteredTasks();
-  setHTML('tasks', tasks.map(t => `<article class="task-group" data-task="${t.id}"><div class="task-row">
+  setHTML('tasks', tasks.map(t => `<article class="task-group" data-task="${t.id}"><div class="task-row ${t.status === 'finished' ? 'is-finished' : ''}">
     <button class="task-due" data-task-edit="${t.id}" data-focus="due" title="더블클릭하여 마감일 수정">${t.due ? `~${t.due.slice(5).replace('-', '/')}` : '—'}</button>
     <button class="task-title ${t.status === 'finished' ? 'finished' : ''}" data-task-edit="${t.id}" data-focus="title" title="더블클릭하여 작업 수정">${esc(t.title)}</button>
     <button class="badge" data-task-edit="${t.id}" data-focus="project" title="더블클릭하여 프로젝트 수정">${LABELS[t.project]}</button>
     <button class="badge ${t.assignee === 'undefined' ? 'unassigned' : ''}" data-task-edit="${t.id}" data-focus="assignee" title="더블클릭하여 담당자 수정">${esc(t.assignee)}</button>
     <input type="checkbox" class="status-check" data-task-check="${t.id}" ${t.status === 'finished' ? 'checked' : ''} aria-label="${esc(t.title)} 완료">
-    ${handleMarkup(t.id)}</div>${t.subtasks?.length ? `<div class="subtasks">${t.subtasks.map(s => `<div class="subtask-row" data-sub="${s.id}" data-parent="${t.id}"><button class="task-title ${s.done ? 'finished' : ''}" data-task-edit="${t.id}" data-focus="subtasks" title="더블클릭하여 세부 할 일 수정">${esc(s.title)}</button><input type="checkbox" class="status-check" data-sub-check="${s.id}" data-parent="${t.id}" ${s.done ? 'checked' : ''} aria-label="${esc(s.title)} 완료">${handleMarkup(t.id,s.id)}</div>`).join('')}</div>` : ''}</article>`).join('') || empty('필터에 맞는 작업이 없습니다.', 'tasks'));
+    ${handleMarkup(t.id)}</div>${t.subtasks?.length ? `<div class="subtasks">${t.subtasks.map(s => `<div class="subtask-row ${s.done ? 'is-finished' : ''}" data-sub="${s.id}" data-parent="${t.id}"><button class="task-title ${s.done ? 'finished' : ''}" data-task-edit="${t.id}" data-focus="subtasks" title="더블클릭하여 세부 할 일 수정">${esc(s.title)}</button><input type="checkbox" class="status-check" data-sub-check="${s.id}" data-parent="${t.id}" ${s.done ? 'checked' : ''} aria-label="${esc(s.title)} 완료">${handleMarkup(t.id,s.id)}</div>`).join('')}</div>` : ''}</article>`).join('') || empty('필터에 맞는 작업이 없습니다.', 'tasks'));
 }
 function renderShared() {
   setHTML('expenses', data.expenses.map(e => `<button class="expense-row row-rule" data-edit="expenses" data-id="${e.id}" aria-label="${esc(e.title)} 지출 수정"><span>${esc(e.title)}</span><span class="expense-detail">${e.quantity || 1}건 / ${shortDate(e.date)} / ${money(e.amount)}</span></button>`).join('') || empty('아직 사용한 예산이 없습니다.', 'expenses'));
@@ -192,8 +192,8 @@ document.addEventListener('dblclick',e=>{
 });
 document.addEventListener('keydown',e=>{const task=e.target.closest('[data-task-edit]');if(task && (e.key==='Enter'||e.key==='F2')){e.preventDefault();openForm('tasks',data.tasks.find(t=>t.id===task.dataset.taskEdit),task.dataset.focus);}const title=e.target.closest('[data-note-title]');if(title&&e.key==='F2'){e.preventDefault();renameNote(title.dataset.noteTitle,title);}});
 document.addEventListener('change',e=>{
-  if(e.target.matches('[data-task-check]')){const task=data.tasks.find(t=>t.id===e.target.dataset.taskCheck);patchTask(task,{status:e.target.checked?'finished':'not finished'});}
-  if(e.target.matches('[data-sub-check]')){const task=data.tasks.find(t=>t.id===e.target.dataset.parent);patchTask(task,{subtasks:task.subtasks.map(s=>s.id===e.target.dataset.subCheck?{...s,done:e.target.checked}:s)});}
+  if(e.target.matches('[data-task-check]')){const checkbox=e.target;const task=data.tasks.find(t=>t.id===e.target.dataset.taskCheck);e.target.disabled=true;e.target.closest('.task-row').classList.toggle('is-finished',e.target.checked);patchTask(task,{status:e.target.checked?'finished':'not finished'}).finally(()=>{checkbox.disabled=false;});}
+  if(e.target.matches('[data-sub-check]')){const checkbox=e.target;const task=data.tasks.find(t=>t.id===e.target.dataset.parent);e.target.disabled=true;e.target.closest('.subtask-row').classList.toggle('is-finished',e.target.checked);patchTask(task,{subtasks:task.subtasks.map(s=>s.id===e.target.dataset.subCheck?{...s,done:e.target.checked}:s)}).finally(()=>{checkbox.disabled=false;});}
 });
 for(const id of ['projectFilter','assigneeFilter','statusFilter']) document.getElementById(id).onchange=()=>{if(id==='projectFilter'&&scope!=='all'&&$('#projectFilter').value!==scope){const chosen=$('#projectFilter').value;chooseProject('all');$('#projectFilter').value=chosen;}renderTasks();};
 

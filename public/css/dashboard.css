@@ -22,3 +22,9 @@
 .panel-scroll{overflow-x:hidden}.column{min-width:0}.note-open{overflow:hidden}.drag-handle{overflow:hidden}.task-row{grid-template-columns:96px minmax(0,1fr) auto auto 29px 24px}.subtask-row{grid-template-columns:minmax(0,1fr) 29px 24px}.drag-handle{width:24px}
 @media(max-width:1250px) and (min-width:761px){.task-row{grid-template-columns:62px minmax(0,1fr) auto auto 24px 24px}.subtask-row{grid-template-columns:minmax(0,1fr) 24px 24px}}
 @media(max-width:760px){.task-row{grid-template-columns:64px minmax(0,1fr) auto auto 25px 24px}.subtask-row{grid-template-columns:minmax(0,1fr) 25px 24px}}
+
+.task-row.is-finished,.subtask-row.is-finished{color:#999}
+.is-finished .task-title,.subtask-row.is-finished .task-title:before{color:inherit}
+.is-finished .badge{background:#aaa;color:var(--paper)}
+.is-finished .badge.unassigned{border-color:#aaa;color:#999;background:transparent}
+.is-finished .status-check{border-color:#aaa;background:#aaa}

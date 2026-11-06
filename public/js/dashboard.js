@@ -64,7 +64,6 @@ async function refresh(force = false) {
 }
 function chooseProject(project, push = true) {
   scope = project;
-  $('#projectHeading').textContent = LABELS[project];
   $$('.project-nav button').forEach(b => { const active = b.dataset.project === project; b.classList.toggle('active', active); b.setAttribute('aria-pressed', active); });
   $('#projectFilter').value = project;
   if (push) history.replaceState({}, '', `/p/patz/dashboard?view=${project}`);

@@ -45,7 +45,8 @@ test('tasks retain nested todos, assignment, status, stable order and reject sta
   const a=await db.createRecord('tasks',{title:'A',project:'patz',due:'2026-11-10',assignee:'은우',subtasks:[{title:'세부',done:false}]});
   const b=await db.createRecord('tasks',{title:'B',project:'room42',assignee:'민우'});
   const c=await db.createRecord('tasks',{title:'C',project:'mandudang',assignee:'채은'});
-  await db.reorderTask(c.id,a.id);
+  assert.deepEqual((await db.getDashboard()).tasks.map(t=>t.id),[c.id,b.id,a.id]);
+  await db.reorderTask(a.id,b.id);
   assert.deepEqual((await db.getDashboard()).tasks.map(t=>t.id),[c.id,a.id,b.id]);
   const updated=await db.updateRecord('tasks',a.id,{status:'finished',baseVersion:a.version});
   assert.equal(updated.subtasks[0].title,'세부');assert.equal(updated.status,'finished');
@@ -65,6 +66,35 @@ test('vault encrypts credentials and card numbers, list only returns masked data
   const all=await db.getDashboard();assert.ok(!JSON.stringify(all).includes('secret-one'));assert.ok(!('secret' in all.accounts[0]));
   await db.updateRecord('accounts',a.id,{title:'Gmail'});
   assert.equal((await db.revealAccount(a.id)).password,'  secret-one  ');
+});
+
+test('new entries lead each shared list regardless of date and preserve task drag order',async()=>{
+  for(const [type,fields] of [
+    ['expenses',{quantity:1,unitPrice:100}],
+    ['accounts',{username:'order@example.test'}],
+    ['notes',{}],
+  ]){
+    const first=await db.createRecord(type,{...fields,title:'first',date:'2099-12-31'});
+    const second=await db.createRecord(type,{...fields,title:'second',date:'2000-01-01'});
+    await db.updateRecord(type,first.id,{title:'edited first'});
+    const snapshot=await (await request('GET','/api/dashboard?project=patz')).json();
+    assert.deepEqual(snapshot[type].slice(0,2).map(item=>item.id),[second.id,first.id]);
+  }
+  const existing=(await db.getDashboard()).tasks.map(task=>task.id);
+  const first=await db.createRecord('tasks',{title:'first',project:'patz'});
+  const second=await db.createRecord('tasks',{title:'second',project:'patz'});
+  assert.deepEqual((await db.getDashboard()).tasks.map(task=>task.id),[second.id,first.id,...existing]);
+  await db.reorderTask(first.id,second.id);
+  const newest=await db.createRecord('tasks',{title:'newest',project:'patz'});
+  await db.updateRecord('tasks',first.id,{title:'edited first'});
+  for(let i=0;i<2;i++){
+    const snapshot=await (await request('GET','/api/dashboard?project=patz')).json();
+    assert.deepEqual(snapshot.tasks.map(task=>task.id),[newest.id,first.id,second.id,...existing]);
+  }
+  const early=await db.createRecord('schedules',{title:'early',project:'patz',date:'2000-01-01'});
+  const late=await db.createRecord('schedules',{title:'late',project:'patz',date:'2099-12-31'});
+  const scheduleIds=(await db.getDashboard()).schedules.map(item=>item.id);
+  assert.ok(scheduleIds.indexOf(early.id)<scheduleIds.indexOf(late.id));
 });
 test('legacy notes are copied once without changing the archived original',async()=>{
   const old=await legacy.createMeeting('patz',{title:'예전 회의록',date:'2026-11-01'});

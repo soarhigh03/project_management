@@ -125,7 +125,7 @@ async function openForm(type, record = null, focus = 'title') {
   const form = $('#entityForm');
   $('.close-button',dialog).onclick = $('.cancel',dialog).onclick = () => dialog.close();
   if(type === 'tasks') {
-    $('.subtask-add',dialog).onclick = () => { $('.subtask-fields',dialog).insertAdjacentHTML('beforeend',subtaskField()); $('.subtask-fields .subtask-field:last-child input[type=text]',dialog).focus(); };
+    $('.subtask-add',dialog).onclick = () => { $('.subtask-fields',dialog).insertAdjacentHTML('afterbegin',subtaskField()); $('.subtask-fields .subtask-field:first-child input[type=text]',dialog).focus(); };
     $('.subtask-fields',dialog).onclick = e => { if(e.target.closest('[data-remove-sub]')) e.target.closest('.subtask-field').remove(); };
   }
   if (type === 'accounts') {
@@ -150,6 +150,7 @@ async function openForm(type, record = null, focus = 'title') {
     try {
       const result = await mutate(item.id ? 'PATCH' : 'POST', { ...values, type, ...(item.id ? { id:item.id,baseVersion:item.version } : {}) });
       dialog.close();
+      if (!item.id && type !== 'schedules') document.getElementById(type).scrollTop = 0;
       if(type === 'notes' && !item.id) await openNote(result.item.id);
     } catch(e) { $('.form-error',form).textContent = e.message; submit.disabled=false; }
   };

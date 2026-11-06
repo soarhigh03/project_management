@@ -22,6 +22,14 @@ TT.me = () => localStorage.getItem('tt_me:patz') || 'undefined';
 function showError(e) { TT.toast(e.message || '다시 시도해 주세요.', true); }
 function setHTML(id, html) { const el = document.getElementById(id); if (el.innerHTML !== html) { const y = el.scrollTop; el.innerHTML = html; el.scrollTop = y; } }
 function empty(label, type) { return `<p class="empty">${label}<br><button data-add="${type}">+ 추가하기</button></p>`; }
+function renderLoadState(error) {
+  const html = error
+    ? `<div class="error-box" role="alert">${esc(error)} <button data-retry-load>다시 시도</button></div>`
+    : '<p class="empty" role="status">불러오는 중입니다...</p>';
+  for (const type of Object.keys(HEADINGS)) setHTML(type, html);
+  $('#balance').textContent = '—';
+  $('#app').setAttribute('aria-busy', error ? 'false' : 'true');
+}
 function filteredTasks() {
   const project = $('#projectFilter').value, assignee = $('#assigneeFilter').value, status = $('#statusFilter').value;
   return data.tasks.filter(t => (project === 'all' || t.project === project) && (assignee === 'all' || t.assignee === assignee) && (status === 'all' || t.status === status));
@@ -32,6 +40,7 @@ function scheduleLabel(item) {
   return `${esc(start)}<span class="schedule-ending">${esc(ending)}<sup class="schedule-project">${LABELS[item.project]}</sup></span>`;
 }
 function renderSchedules() {
+  if (!revision) return;
   const groups = new Map();
   const schedules = data.schedules.filter(s => scope === 'all' || s.project === scope);
   for (const item of schedules) { if (!groups.has(item.date)) groups.set(item.date, []); groups.get(item.date).push(item); }
@@ -39,6 +48,7 @@ function renderSchedules() {
 }
 function handleMarkup(taskId, subtaskId = '') { return `<button class="drag-handle" data-drag="${taskId}" ${subtaskId ? `data-subtask="${subtaskId}"` : ''} aria-label="순서 이동. Alt와 위 또는 아래 방향키로도 이동할 수 있습니다." title="드래그해서 순서 이동 · Alt + ↑/↓"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>`; }
 function renderTasks() {
+  if (!revision) return;
   const tasks = filteredTasks();
   setHTML('tasks', tasks.map(t => `<article class="task-group" data-task="${t.id}"><div class="task-row ${t.status === 'finished' ? 'is-finished' : ''}">
     <button class="task-due" data-task-edit="${t.id}" data-focus="due" title="더블클릭하여 마감일 수정">${t.due ? `~${t.due.slice(5).replace('-', '/')}` : '—'}</button>
@@ -49,6 +59,7 @@ function renderTasks() {
     ${handleMarkup(t.id)}</div>${t.subtasks?.length ? `<div class="subtasks">${t.subtasks.map(s => `<div class="subtask-row ${s.done ? 'is-finished' : ''}" data-sub="${s.id}" data-parent="${t.id}"><button class="task-title ${s.done ? 'finished' : ''}" data-task-edit="${t.id}" data-focus="subtasks" title="더블클릭하여 세부 할 일 수정">${esc(s.title)}</button><input type="checkbox" class="status-check" data-sub-check="${s.id}" data-parent="${t.id}" ${s.done ? 'checked' : ''} aria-label="${esc(s.title)} 완료">${handleMarkup(t.id,s.id)}</div>`).join('')}</div>` : ''}</article>`).join('') || empty('필터에 맞는 작업이 없습니다.', 'tasks'));
 }
 function renderShared() {
+  if (!revision) return;
   setHTML('expenses', data.expenses.map(e => `<button class="expense-row row-rule" data-edit="expenses" data-id="${e.id}" aria-label="${esc(e.title)} 지출 수정"><span>${esc(e.title)}</span><span class="expense-detail">${e.quantity || 1}건 / ${shortDate(e.date)} / ${money(e.amount)}</span></button>`).join('') || empty('아직 사용한 예산이 없습니다.', 'expenses'));
   $('#balance').textContent = money(data.budget.remaining);
   $('#balance').classList.toggle('negative', data.budget.remaining < 0);
@@ -64,6 +75,7 @@ function render() { renderSchedules(); renderTasks(); renderShared(); }
 async function refresh(force = false) {
   if (refreshing || dragging) return;
   refreshing = true;
+  if (!revision) renderLoadState();
   try {
     const next = await TT.api('GET', API);
     const nextRevision = JSON.stringify(next);
@@ -71,7 +83,7 @@ async function refresh(force = false) {
     if (!dragging && (force || nextRevision !== revision)) { revision = nextRevision; render(); }
     $('#app').setAttribute('aria-busy', 'false');
   } catch (e) {
-    if (!revision) { $('#tasks').innerHTML = `<div class="error-box">${esc(e.message)} <button id="retryLoad">다시 시도</button></div>`; $('#retryLoad').onclick = () => refresh(true); }
+    if (!revision) renderLoadState(e.message || '불러오지 못했습니다.');
     if (e.status === 401) location.href = '/';
   } finally { refreshing = false; }
 }
@@ -243,6 +255,7 @@ window.addEventListener('blur',hideSecrets);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)hideSecrets();else refresh();});
 
 document.addEventListener('click', e => {
+  if (e.target.closest('[data-retry-load]')) { refresh(true); return; }
   const add=e.target.closest('[data-add]');if(add){openForm(add.dataset.add);return;}
   const edit=e.target.closest('[data-edit]');if(edit){openForm(edit.dataset.edit,data[edit.dataset.edit].find(x=>x.id===edit.dataset.id));return;}
   const nav=e.target.closest('[data-project]');if(nav){chooseProject(nav.dataset.project);return;}

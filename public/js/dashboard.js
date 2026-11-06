@@ -34,7 +34,7 @@ function renderSchedules() {
   for (const item of schedules) { if (!groups.has(item.date)) groups.set(item.date, []); groups.get(item.date).push(item); }
   setHTML('schedules', [...groups].map(([date, items]) => `<div class="schedule-row row-rule"><div class="date-lockup" title="${esc(date)}"><span class="date-number">${date.slice(8)}</span><span class="date-day">${dayName(date)}</span></div><div class="schedule-items">${items.map(s => `<button class="schedule-item ${s.important ? 'important' : ''}" data-edit="schedules" data-id="${s.id}" aria-label="${esc(s.important ? '중요 일정: ' : '')}${esc(s.title)} 수정">${scheduleLabel(s)}<span class="edit-mark" aria-hidden="true">↗</span></button>`).join('')}</div></div>`).join('') || empty('등록된 일정이 없습니다.', 'schedules'));
 }
-function handleMarkup(taskId, subtaskId = '') { return `<button class="drag-handle" data-drag="${taskId}" ${subtaskId ? `data-subtask="${subtaskId}"` : ''} aria-label="순서 이동. Alt와 위 또는 아래 방향키로도 이동할 수 있습니다." title="드래그해서 순서 이동 · Alt + ↑/↓"><img src="/assets/figma/dots.svg" alt="" draggable="false"></button>`; }
+function handleMarkup(taskId, subtaskId = '') { return `<button class="drag-handle" data-drag="${taskId}" ${subtaskId ? `data-subtask="${subtaskId}"` : ''} aria-label="순서 이동. Alt와 위 또는 아래 방향키로도 이동할 수 있습니다." title="드래그해서 순서 이동 · Alt + ↑/↓"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>`; }
 function renderTasks() {
   const tasks = filteredTasks();
   setHTML('tasks', tasks.map(t => `<article class="task-group" data-task="${t.id}"><div class="task-row ${t.status === 'finished' ? 'is-finished' : ''}">

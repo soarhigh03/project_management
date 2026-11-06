@@ -41,4 +41,5 @@
 .is-finished .badge{background:#aaa;color:var(--paper)}
 .is-finished .badge.unassigned{border-color:#aaa;color:#999;background:transparent}
 .is-finished .status-check{border-color:#aaa;background:#aaa}
+.masked[data-revealed]{white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible;text-overflow:clip;user-select:text}
 @media(max-width:1250px){.filter-chip{font-size:12px}}

@@ -15,7 +15,7 @@ const noteDate = d => `${d.replaceAll('-', '').slice(2)} (${dayName(d)})`;
 let data = { tasks: [], schedules: [], expenses: [], accounts: [], notes: [], budget: { remaining: 2000000 } };
 let scope = new URLSearchParams(location.search).get('view') || 'patz';
 if (!(scope in LABELS)) scope = 'patz';
-let revision = '', refreshing = false, noteController = null, routeGeneration = 0, dragging = false;
+let revision = '', accountRevision = '', refreshing = false, noteController = null, routeGeneration = 0, dragging = false;
 const filters = Object.fromEntries(['projectFilter', 'assigneeFilter', 'statusFilter'].map(id => [id, createFilterChip(document.getElementById(id))]));
 TT.me = () => localStorage.getItem('tt_me:patz') || 'undefined';
 
@@ -53,7 +53,12 @@ function renderShared() {
   $('#balance').textContent = money(data.budget.remaining);
   $('#balance').classList.toggle('negative', data.budget.remaining < 0);
   if (!$('#notes .rename-input')) setHTML('notes', data.notes.map(n => `<div class="note-row row-rule" data-note="${n.id}"><button class="note-date" data-note-open="${n.id}" aria-label="${esc(n.title)} 열기">${noteDate(n.date)}</button><button class="note-title" data-note-title="${n.id}" title="클릭해서 열기 · 더블클릭해서 제목 수정">${esc(n.title)}</button><button class="note-open" data-note-open="${n.id}" aria-label="${esc(n.title)} 열기"><img src="/assets/figma/arrow.svg" alt=""></button></div>`).join('') || empty('첫 회의록을 작성해 보세요.', 'notes'));
-  setHTML('accounts', data.accounts.map(a => `<article class="account-row row-rule" data-account="${a.id}"><button class="account-name" data-edit="accounts" data-id="${a.id}" title="계정 정보 수정">${esc(a.title)}${a.kind === 'card' ? '<span class="account-kind">CARD</span>' : ''}</button><div class="account-details"><button class="account-id" data-edit="accounts" data-id="${a.id}" title="정보 수정">${esc(a.summary)}</button><div class="account-secret"><span class="masked">**************</span><button class="icon-button" data-reveal="${a.id}" aria-label="${esc(a.title)} ${a.kind === 'card' ? '카드 번호' : '비밀번호'} 표시"><img src="/assets/figma/eye.png" alt=""></button><button class="icon-button" data-copy="${a.id}" aria-label="${esc(a.title)} ${a.kind === 'card' ? '카드 번호' : '비밀번호'} 복사"><img src="/assets/figma/copy.png" alt=""></button></div></div></article>`).join('') || empty('팀에서 사용하는 계정이나 카드를 추가하세요.', 'accounts'));
+  const nextAccountRevision = JSON.stringify(data.accounts);
+  if (nextAccountRevision !== accountRevision) {
+    hideSecrets();
+    accountRevision = nextAccountRevision;
+    setHTML('accounts', data.accounts.map(a => `<article class="account-row row-rule" data-account="${a.id}"><button class="account-name" data-edit="accounts" data-id="${a.id}" title="계정 정보 수정">${esc(a.title)}${a.kind === 'card' ? '<span class="account-kind">CARD</span>' : ''}</button><div class="account-details"><button class="account-id" data-edit="accounts" data-id="${a.id}" title="정보 수정">${esc(a.summary)}</button><div class="account-secret"><span class="masked">**************</span><button class="icon-button" data-reveal="${a.id}" aria-pressed="false" aria-label="${esc(a.title)} ${a.kind === 'card' ? '카드 번호' : '비밀번호'} 표시"><img src="/assets/figma/eye.png" alt=""></button><button class="icon-button" data-copy="${a.id}" aria-label="${esc(a.title)} ${a.kind === 'card' ? '카드 번호' : '비밀번호'} 복사"><img src="/assets/figma/copy.png" alt=""></button></div></div></article>`).join('') || empty('팀에서 사용하는 계정이나 카드를 추가하세요.', 'accounts'));
+  }
 }
 function render() { renderSchedules(); renderTasks(); renderShared(); }
 async function refresh(force = false) {
@@ -166,18 +171,63 @@ async function renameNote(id, button) {
   input.onkeydown = e => { if(e.key==='Enter'){e.preventDefault();commit();} if(e.key==='Escape')commit(true); };
 }
 const revealTimers = new Map();
+function maskSecret(row) {
+  const masked = $('.masked', row), button = $('[data-reveal]', row);
+  masked.textContent = '**************';
+  delete masked.dataset.revealed;
+  button.setAttribute('aria-pressed', 'false');
+  button.setAttribute('aria-label', button.getAttribute('aria-label').replace(/ 숨기기$/, ' 표시'));
+  clearTimeout(revealTimers.get(row.dataset.account));
+  revealTimers.delete(row.dataset.account);
+}
+async function copySecret(valuePromise) {
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      // Start during the click; resolve the server response inside ClipboardItem.
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/plain': valuePromise.then(value => new Blob([value], { type: 'text/plain' }))
+      })]);
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(await valuePromise);
+      return;
+    }
+  } catch { /* Fall back for browsers without async clipboard support. */ }
+  const value = await valuePromise;
+  const field = document.createElement('textarea');
+  const active = document.activeElement;
+  field.value = value;
+  field.readOnly = true;
+  field.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+  document.body.append(field);
+  field.select();
+  try {
+    if (!document.execCommand('copy')) throw new Error('복사하지 못했습니다. 비밀번호를 표시한 뒤 직접 복사해 주세요.');
+  } finally { field.remove(); active?.focus({ preventScroll: true }); }
+}
 async function secretAction(id, copy) {
   const account = data.accounts.find(a=>a.id===id); if(!account) return;
-  const row = $(`[data-account="${id}"]`), masked=$('.masked',row);
-  if(!copy && masked.dataset.revealed) { masked.textContent='**************';delete masked.dataset.revealed;clearTimeout(revealTimers.get(id));return; }
+  const row = $(`[data-account="${id}"]`); if (!row) return;
+  const masked = $('.masked', row), button = $(copy ? '[data-copy]' : '[data-reveal]', row);
+  if (!copy && masked.dataset.revealed) { maskSecret(row); return; }
+  button.disabled = true;
   try {
-    const {secret} = await TT.api('POST',API,{action:'reveal',id});
-    const value = account.kind==='card' ? secret.number : secret.password;
-    if(copy) { await navigator.clipboard.writeText(value || ''); TT.toast('복사했습니다.'); }
-    else { masked.textContent=value || '(비밀번호 없음)';masked.dataset.revealed='true';clearTimeout(revealTimers.get(id));revealTimers.set(id,setTimeout(()=>{masked.textContent='**************';delete masked.dataset.revealed;},15000)); }
-  } catch(e){showError(e);}
+    const valuePromise = TT.api('POST', API, { action:'reveal', id }).then(({ secret }) => (account.kind === 'card' ? secret.number : secret.password) || '');
+    if (copy) { await copySecret(valuePromise); TT.toast('복사했습니다.'); }
+    else {
+      const value = await valuePromise;
+      if (!row.isConnected || document.hidden || !document.hasFocus()) return;
+      masked.textContent = value || (account.kind === 'card' ? '(카드 번호 없음)' : '(비밀번호 없음)');
+      masked.dataset.revealed = 'true';
+      button.setAttribute('aria-pressed', 'true');
+      button.setAttribute('aria-label', button.getAttribute('aria-label').replace(/ 표시$/, ' 숨기기'));
+      clearTimeout(revealTimers.get(id));
+      revealTimers.set(id, setTimeout(() => maskSecret(row), 15000));
+    }
+  } catch(e){showError(e);} finally { button.disabled = false; }
 }
-function hideSecrets(){ $$('.masked[data-revealed]').forEach(el=>{el.textContent='**************';delete el.dataset.revealed;}); }
+function hideSecrets(){ $$('.masked[data-revealed]').forEach(el=>maskSecret(el.closest('[data-account]'))); }
 window.addEventListener('blur',hideSecrets);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)hideSecrets();else refresh();});
 

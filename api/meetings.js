@@ -1,7 +1,9 @@
 // 회의록 API
 // GET    /api/meetings?project=x            → 목록(본문 제외)
 // GET    /api/meetings?project=x&id=Y       → 단일 회의록(본문 포함)
+// GET    /api/meetings?project=x&imageId=S  → 본문에 삽입된 이미지 원본(<img src>용)
 // POST   /api/meetings?project=x            → 생성 {title?, date?}
+// POST   /api/meetings?project=x            → 이미지 업로드 {image: dataURL} → {imageId}
 // PATCH  /api/meetings?project=x            → 메타 수정 {id, title?, date?}
 // PUT    /api/meetings?project=x            → 본문 저장 {id, body, baseVersion} — 낙관적 잠금
 // DELETE /api/meetings?project=x&id=Y       → 삭제
@@ -13,6 +15,21 @@ export default route({
   async GET(req, res) {
     const project = requireProject(req, res);
     if (!project) return;
+
+    // 본문에 삽입된 이미지 — <img src>가 직접 읽어가므로 바이너리로 내려준다
+    const imageId = query(req).get('imageId');
+    if (imageId) {
+      const dataUrl = await store.getScreenshot(project.id, imageId);
+      const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.*)$/s.exec(dataUrl || '');
+      if (!m) return json(res, 404, { error: '이미지를 찾을 수 없습니다.' });
+      const buf = Buffer.from(m[2], 'base64');
+      res.statusCode = 200;
+      res.setHeader('Content-Type', m[1]);
+      res.setHeader('Content-Length', buf.length);
+      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+      return res.end(buf);
+    }
+
     const id = query(req).get('id');
     if (id) {
       const m = await store.getMeeting(project.id, id);
@@ -26,6 +43,17 @@ export default route({
     const project = requireProject(req, res);
     if (!project) return;
     const body = await readJson(req);
+
+    // 본문 이미지 업로드 — 본문에는 주소만 들어가므로 본문 용량 한도와 무관하다
+    if (body && typeof body.image === 'string') {
+      try {
+        return json(res, 201, { imageId: await store.saveImage(project.id, body.image) });
+      } catch (err) {
+        if (err && err.status === 400) return json(res, 400, { error: err.message });
+        throw err;
+      }
+    }
+
     const meeting = await store.createMeeting(project.id, body || {});
     json(res, 201, { meeting });
   },

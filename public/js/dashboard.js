@@ -14,11 +14,7 @@ let data = { tasks: [], schedules: [], expenses: [], accounts: [], notes: [], bu
 let scope = new URLSearchParams(location.search).get('view') || 'patz';
 if (!(scope in LABELS)) scope = 'patz';
 let revision = '', refreshing = false, noteController = null, routeGeneration = 0, dragging = false;
-const member = $('#memberSelect');
-member.value = localStorage.getItem('tt_me:patz') || 'undefined';
-if (!member.value) member.value = 'undefined';
-member.onchange = () => localStorage.setItem('tt_me:patz', member.value);
-TT.me = () => member.value;
+TT.me = () => localStorage.getItem('tt_me:patz') || 'undefined';
 
 function showError(e) { TT.toast(e.message || '다시 시도해 주세요.', true); }
 function setHTML(id, html) { const el = document.getElementById(id); if (el.innerHTML !== html) { const y = el.scrollTop; el.innerHTML = html; el.scrollTop = y; } }
@@ -60,10 +56,8 @@ async function refresh(force = false) {
     const nextRevision = JSON.stringify(next);
     data = next;
     if (!dragging && (force || nextRevision !== revision)) { revision = nextRevision; render(); }
-    $('#connection').textContent = '동기화됨'; $('#connection').classList.remove('error');
     $('#app').setAttribute('aria-busy', 'false');
   } catch (e) {
-    $('#connection').textContent = '연결 재시도 중'; $('#connection').classList.add('error');
     if (!revision) { $('#tasks').innerHTML = `<div class="error-box">${esc(e.message)} <button id="retryLoad">다시 시도</button></div>`; $('#retryLoad').onclick = () => refresh(true); }
     if (e.status === 401) location.href = '/';
   } finally { refreshing = false; }
@@ -246,7 +240,6 @@ async function closeNote(push = true) {
   await refresh(true);
 }
 window.addEventListener('popstate',async()=>{const match=location.pathname.match(/\/notes\/([^/]+)$/);if(match)await openNote(match[1],false);else{await closeNote(false);chooseProject(new URLSearchParams(location.search).get('view')||'patz',false);}});
-$('#logout').onclick=async()=>{try{if(noteController)await noteController.destroy();await TT.api('DELETE','/api/auth');location.href='/';}catch(e){showError(e);}};
 
 async function boot(){
   const project=location.pathname.match(/^\/p\/([^/]+)/)?.[1];

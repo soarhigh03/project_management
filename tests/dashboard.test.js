@@ -15,7 +15,13 @@ const {syncNote}=await import('../lib/note-sync.js');
 const {grantProject}=await import('../lib/auth.js');
 const {default:dashboard}=await import('../api/dashboard.js');
 const {default:notes}=await import('../api/notes.js');
-const server=http.createServer((req,res)=>(req.url.startsWith('/api/notes')?notes:dashboard)(req,res));
+const {default:auth}=await import('../api/auth.js');
+const {default:config}=await import('../api/config.js');
+const {default:bugs}=await import('../api/bugs.js');
+const {default:features}=await import('../api/features.js');
+const {default:meetings}=await import('../api/meetings.js');
+const handlers={dashboard,notes,auth,config,bugs,features,meetings};
+const server=http.createServer((req,res)=>handlers[new URL(req.url,'http://localhost').pathname.slice(5)](req,res));
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin=`http://127.0.0.1:${server.address().port}`;
 function cookie(project){let value;grantProject({headers:{}},{setHeader:(k,v)=>{value=v;}},project);return value.split(';')[0];}
@@ -96,7 +102,7 @@ test('concurrent note updates converge, retries are idempotent and compaction pr
 });
 test('API enforces login, workspace isolation, CSRF, validation and persistent CRUD',async()=>{
   assert.equal((await request('GET','/api/dashboard?project=patz',null,{Cookie:''})).status,401);
-  assert.equal((await request('GET','/api/dashboard?project=jarvis',null,{Cookie:cookie('jarvis')})).status,403);
+  assert.equal((await request('GET','/api/dashboard?project=patz',null,{Cookie:cookie('jarvis')})).status,401);
   assert.equal((await request('POST','/api/dashboard?project=patz',{type:'notes',title:'bad'},{Origin:'https://untrusted.test'})).status,403);
   const response=await request('POST','/api/dashboard?project=patz',{type:'schedules',title:'출시',project:'room42',date:'2026-12-01',important:true});
   assert.equal(response.status,201);const {item}=await response.json();
@@ -107,6 +113,19 @@ test('API enforces login, workspace isolation, CSRF, validation and persistent C
   const upload=await request('POST','/api/notes?project=patz',{image:picture});assert.equal(upload.status,201);const {imageId}=await upload.json();
   const asset=await request('GET',`/api/notes?project=patz&imageId=${imageId}`);assert.equal(asset.headers.get('content-type'),'image/png');
   assert.equal((await request('GET',`/api/notes?project=patz&imageId=${imageId}`,null,{Cookie:''})).status,401);
+});
+
+test('retired projects are unlisted and reject login and existing sessions',async()=>{
+  const configuration=await (await request('GET','/api/config')).json();
+  assert.deepEqual(configuration.projects.map(project=>project.id),['patz']);
+  assert.equal((await request('GET','/api/auth?project=patz')).status,200);
+  for(const project of ['jarvis','mijal']){
+    const previousSession={Cookie:cookie(project)};
+    assert.equal((await request('POST','/api/auth',{project,password:'unused'},previousSession)).status,404);
+    for(const endpoint of ['auth','dashboard','notes','bugs','features','meetings']){
+      assert.equal((await request('GET',`/api/${endpoint}?project=${project}`,null,previousSession)).status,404);
+    }
+  }
 });
 
 test('large offline note batches fit the HTTP limit and survive a fresh read',async()=>{

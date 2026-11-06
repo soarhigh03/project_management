@@ -21,22 +21,6 @@ export default [
     regions: ['홈', '탐색', '지도', '커뮤니티', '설정', 'DB'],
   },
 
-  {
-    id: 'jarvis',
-    name: 'jarvis',
-    passwordHash: 'scrypt:16384:8:1:7471c5ef3293f28b2523ee8c85f1a42a:01b24325d8e35cdfe05d51a3ad9bcc6772c2eea659b002aae96f27e287cd81d9',
-    members: ['호승', '동휘', '유리', '은우'],
-    regions: ['디자인', 'AI', '프론트', '기획'],
-  },
-
-  {
-    id: 'mijal',
-    name: '말미잘',
-    passwordHash: 'scrypt:16384:8:1:5d9051180d202be50753be732c0cd77e:7c8f14327c41930f7492f66c17dd1367eeecdf93b0efad03dee5fc0ac68dd51d',
-    members: ['병호', '경민', '은우'],
-    regions: ['홈', '매일 한마디', '세줄요약', '따라 읽기', '스트릭', '설정'],
-  },
-
   // 프로젝트를 추가하려면 위 블록을 복사해서 붙여넣고 수정하세요.
   // {
   //   id: 'my-app',

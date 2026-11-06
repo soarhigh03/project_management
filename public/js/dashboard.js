@@ -1,3 +1,5 @@
+import { createFilterChip } from './filter-chip.js';
+
 const $ = (q, root = document) => root.querySelector(q);
 const $$ = (q, root = document) => [...root.querySelectorAll(q)];
 const esc = TT.esc;
@@ -14,6 +16,7 @@ let data = { tasks: [], schedules: [], expenses: [], accounts: [], notes: [], bu
 let scope = new URLSearchParams(location.search).get('view') || 'patz';
 if (!(scope in LABELS)) scope = 'patz';
 let revision = '', refreshing = false, noteController = null, routeGeneration = 0, dragging = false;
+const filters = Object.fromEntries(['projectFilter', 'assigneeFilter', 'statusFilter'].map(id => [id, createFilterChip(document.getElementById(id))]));
 TT.me = () => localStorage.getItem('tt_me:patz') || 'undefined';
 
 function showError(e) { TT.toast(e.message || '다시 시도해 주세요.', true); }
@@ -71,6 +74,7 @@ function chooseProject(project, push = true) {
   scope = project;
   $$('.project-nav button').forEach(b => { const active = b.dataset.project === project; b.classList.toggle('active', active); b.setAttribute('aria-pressed', active); });
   $('#projectFilter').value = project;
+  filters.projectFilter.sync();
   if (push) history.replaceState({}, '', `/p/patz/dashboard?view=${project}`);
   renderSchedules(); renderTasks();
 }
@@ -195,7 +199,7 @@ document.addEventListener('change',e=>{
   if(e.target.matches('[data-task-check]')){const checkbox=e.target;const task=data.tasks.find(t=>t.id===e.target.dataset.taskCheck);e.target.disabled=true;e.target.closest('.task-row').classList.toggle('is-finished',e.target.checked);patchTask(task,{status:e.target.checked?'finished':'not finished'}).finally(()=>{checkbox.disabled=false;});}
   if(e.target.matches('[data-sub-check]')){const checkbox=e.target;const task=data.tasks.find(t=>t.id===e.target.dataset.parent);e.target.disabled=true;e.target.closest('.subtask-row').classList.toggle('is-finished',e.target.checked);patchTask(task,{subtasks:task.subtasks.map(s=>s.id===e.target.dataset.subCheck?{...s,done:e.target.checked}:s)}).finally(()=>{checkbox.disabled=false;});}
 });
-for(const id of ['projectFilter','assigneeFilter','statusFilter']) document.getElementById(id).onchange=()=>{if(id==='projectFilter'&&scope!=='all'&&$('#projectFilter').value!==scope){const chosen=$('#projectFilter').value;chooseProject('all');$('#projectFilter').value=chosen;}renderTasks();};
+for(const id of ['projectFilter','assigneeFilter','statusFilter']) document.getElementById(id).onchange=()=>{if(id==='projectFilter'&&scope!=='all'&&$('#projectFilter').value!==scope){const chosen=$('#projectFilter').value;chooseProject('all');$('#projectFilter').value=chosen;filters.projectFilter.sync();}renderTasks();};
 
 async function moveTask(id, beforeId, subId) {
   if(subId){const task=data.tasks.find(t=>t.id===id);const subtasks=task.subtasks.filter(s=>s.id!==subId);const moving=task.subtasks.find(s=>s.id===subId);let index=beforeId?subtasks.findIndex(s=>s.id===beforeId):subtasks.length;if(index<0)index=subtasks.length;subtasks.splice(index,0,moving);await patchTask(task,{subtasks});}

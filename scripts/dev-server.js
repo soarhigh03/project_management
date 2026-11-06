@@ -51,6 +51,7 @@ const server = http.createServer(async (req, res) => {
   // 정적 파일 (+ /p/* → app.html 리라이트, vercel.json과 동일)
   let file = p === '/' ? '/index.html' : p;
   if (p.startsWith('/p/')) file = '/app.html';
+  if (p.startsWith('/legacy/p/')) file = '/legacy/app.html';
   const full = path.normalize(path.join(PUBLIC, file));
   if (!full.startsWith(PUBLIC)) { res.statusCode = 403; return res.end('forbidden'); }
   try {

@@ -10,6 +10,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/legacy/p/:path*", "destination": "/legacy/app.html" },
     { "source": "/p/:path*", "destination": "/app.html" }
   ],
   "headers": [

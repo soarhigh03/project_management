@@ -1,0 +1,616 @@
+// 기능 페이지: 언리얼 블루프린트 스타일 노드 그래프
+//  - 잡(작업) = 노드, 태스크(할 일) = 노드 안 체크리스트
+//  - 간선 = 의존성 (왼쪽 점 = 입력, 오른쪽 점 = 출력; 출력→입력으로 드래그해 연결)
+window.TT = window.TT || {};
+TT.pages = TT.pages || {};
+
+TT.pages.features = async function (main, project) {
+  const NODE_W = 244;    // 기본/신규 잡 폭
+  const NODE_MIN = 200;
+  const NODE_MAX = 800;
+  const PORT_Y = 20;     // 노드 상단에서 포트 중심까지
+  const TASK_STATES = [
+    { id: 'todo', name: '시작 전' },
+    { id: 'doing', name: '진행 중' },
+    { id: 'waiting', name: '대기' },
+    { id: 'done', name: '완료' },
+  ];
+  const taskWidth = (j) => j.width || NODE_W;
+
+  // 담당자별 노드 색: 팀원 순서대로 팔레트 색을 배정 (팀당 최대 4~5명)
+  const PERSON_SLOTS = 5;
+  const personVar = (name) => {
+    const i = name ? project.members.indexOf(name) : -1;
+    return i < 0 ? null : `var(--person-${i % PERSON_SLOTS})`;
+  };
+
+  let jobs = [];   // {id,title,assignee,x,y,width,tasks:[{id,title,assignee,status,done}]}
+  let edges = [];  // {id,from,to}
+  const view = { x: 60, y: 40, z: 1 };
+  let selEdge = null;      // 선택된 간선 id
+  let draft = null;        // 간선 드래그 중 {from, mx, my}
+  let dragging = null;     // 노드 드래그 중
+  let resizing = null;     // 노드 리사이즈 중
+  let interacting = false; // 폴링 억제 플래그
+  let focusAddJob = null;  // 재렌더 후 포커스 복원할 잡 id
+
+  main.innerHTML = `
+    <div class="feat-page">
+      <div class="feat-toolbar">
+        <button class="btn primary" id="addJob">+ 작업 추가</button>
+        <button class="btn" id="fitBtn">화면 맞춤</button>
+        <span class="toggle-chip" id="fMine">내 담당만</span>
+        <div class="member-legend" id="memberLegend"></div>
+      </div>
+      <div class="canvas" id="canvas">
+        <div class="world" id="world">
+          <svg class="edges" id="edgeSvg" width="20000" height="20000"
+               viewBox="-10000 -10000 20000 20000"
+               style="left:-10000px; top:-10000px"></svg>
+          <div id="nodes"></div>
+        </div>
+      </div>
+    </div>`;
+
+  const canvas = main.querySelector('#canvas');
+  const world = main.querySelector('#world');
+  const edgeSvg = main.querySelector('#edgeSvg');
+  const nodesEl = main.querySelector('#nodes');
+
+  // 담당자 색상 범례 (색 ↔ 이름 매핑)
+  const legendEl = main.querySelector('#memberLegend');
+  legendEl.innerHTML =
+    project.members.map((m, i) =>
+      `<span class="lg-item"><span class="lg-dot" style="background:var(--person-${i % 5})"></span>${TT.esc(m)}</span>`).join('') +
+    `<span class="lg-item"><span class="lg-dot lg-none"></span>미지정</span>`;
+
+  // ---- "내 담당만" 필터 ----
+  let mineOnly = false;
+  const isMine = (j) => {
+    const me = TT.me();
+    return !!me && (j.assignee === me || j.tasks.some((t) => t.assignee === me));
+  };
+  const jobHidden = (j) => mineOnly && !!TT.me() && !isMine(j);
+
+  const jobById = (id) => jobs.find((j) => j.id === id);
+  const taskStatus = (t) => t.status || (t.done ? 'done' : 'todo');
+  const jobDone = (j) => j.tasks.length > 0 && j.tasks.every((t) => taskStatus(t) === 'done');
+  const jobBlocked = (j) => edges.some((e) => e.to === j.id && jobById(e.from) && !jobDone(jobById(e.from)));
+
+  function applyView() {
+    world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  }
+
+  function toWorld(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (clientX - r.left - view.x) / view.z, y: (clientY - r.top - view.y) / view.z };
+  }
+
+  // ---------- 서버 연동 ----------
+  async function op(body) {
+    try {
+      const g = await TT.api('POST', `/api/features?project=${project.id}`, body);
+      setGraph(g);
+    } catch (ex) {
+      TT.toast(ex.message, true);
+      await load(); // 서버 상태와 다시 동기화
+    }
+  }
+
+  function setGraph(g) {
+    jobs = g.jobs;
+    edges = g.edges;
+    if (selEdge && !edges.some((e) => e.id === selEdge)) selEdge = null;
+    render();
+  }
+
+  async function load() {
+    try { setGraph(await TT.api('GET', `/api/features?project=${project.id}`)); }
+    catch (ex) { TT.toast(ex.message, true); }
+  }
+
+  // ---------- 간선 그리기 ----------
+  function portPos(job, kind) {
+    return kind === 'out'
+      ? { x: job.x + taskWidth(job), y: job.y + PORT_Y }
+      : { x: job.x, y: job.y + PORT_Y };
+  }
+
+  function bezier(a, b) {
+    const dx = Math.max(50, Math.abs(b.x - a.x) * 0.55);
+    return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
+  }
+
+  function renderEdges() {
+    let html = '';
+    for (const e of edges) {
+      const from = jobById(e.from), to = jobById(e.to);
+      if (!from || !to) continue;
+      if (jobHidden(from) || jobHidden(to)) continue;
+      const d = bezier(portPos(from, 'out'), portPos(to, 'in'));
+      const cls = [jobDone(from) ? 'done' : '', selEdge === e.id ? 'sel' : ''].join(' ');
+      html += `<g class="${cls}" data-edge="${e.id}">
+        <path class="edge-line" d="${d}"></path>
+        <path class="edge-hit" d="${d}"></path>
+      </g>`;
+    }
+    if (draft) {
+      const from = jobById(draft.from);
+      if (from) {
+        html += `<g><path class="edge-line" stroke-dasharray="6 5" d="${bezier(portPos(from, 'out'), { x: draft.mx, y: draft.my })}"></path></g>`;
+      }
+    }
+    edgeSvg.innerHTML = html;
+
+    edgeSvg.querySelectorAll('.edge-hit').forEach((p) => {
+      p.onclick = (e) => {
+        e.stopPropagation();
+        selEdge = (selEdge === p.parentNode.dataset.edge) ? null : p.parentNode.dataset.edge;
+        render();
+      };
+    });
+
+    // 선택된 간선 중간에 삭제 버튼
+    main.querySelectorAll('.edge-del').forEach((b) => b.remove());
+    if (selEdge) {
+      const e = edges.find((x) => x.id === selEdge);
+      const from = e && jobById(e.from), to = e && jobById(e.to);
+      if (from && to) {
+        const a = portPos(from, 'out'), bb = portPos(to, 'in');
+        const btn = document.createElement('button');
+        btn.className = 'edge-del';
+        btn.textContent = '✕';
+        btn.title = '연결 삭제';
+        btn.style.left = (a.x + bb.x) / 2 + 'px';
+        btn.style.top = (a.y + bb.y) / 2 + 'px';
+        btn.onclick = () => { const id = selEdge; selEdge = null; op({ op: 'deleteEdge', edgeId: id }); };
+        world.appendChild(btn);
+      }
+    }
+  }
+
+  // ---------- 노드 그리기 ----------
+  // 상단 칩 = 진행도/상태 (노드 전체 색과 분리해 완료 여부를 이 색으로만 표시)
+  function jobBadge(j, pct) {
+    if (jobDone(j)) return '<span class="job-badge b-done">완료</span>';
+    if (jobBlocked(j)) return '<span class="job-badge b-blocked">선행 대기</span>';
+    if (j.tasks.some((t) => taskStatus(t) === 'done')) return `<span class="job-badge b-doing">진행 ${pct}%</span>`;
+    return '<span class="job-badge b-todo">시작 전</span>';
+  }
+
+  function memberOptions(sel) {
+    return `<option value="">미지정</option>` +
+      project.members.map((m) => `<option value="${TT.esc(m)}" ${m === sel ? 'selected' : ''}>${TT.esc(m)}</option>`).join('');
+  }
+
+  function renderJob(j) {
+    const el = document.createElement('div');
+    el.className = 'job' + (jobDone(j) ? ' done' : jobBlocked(j) ? ' blocked' : '');
+    el.style.left = j.x + 'px';
+    el.style.top = j.y + 'px';
+    el.style.width = taskWidth(j) + 'px';
+    el.dataset.id = j.id;
+    const doneCount = j.tasks.filter((t) => taskStatus(t) === 'done').length;
+    const pct = j.tasks.length ? Math.round((doneCount / j.tasks.length) * 100) : 0;
+    // 노드 전체 색 = 담당자 색 (미지정이면 중립색 유지)
+    const pc = personVar(j.assignee);
+    if (pc) el.style.setProperty('--pc', pc);
+
+    const taskStatusOptions = (cur) =>
+      TASK_STATES.map((s) => `<option value="${s.id}" ${s.id === cur ? 'selected' : ''}>${s.name}</option>`).join('');
+
+    el.innerHTML = `
+      <div class="port in" title="선행 작업 연결 (입력)"></div>
+      <div class="port out" title="드래그해서 다음 작업에 연결 (출력)"></div>
+      <div class="job-resize left" title="왼쪽으로 늘리기"></div>
+      <div class="job-resize right" title="오른쪽으로 늘리기"></div>
+      <div class="job-head">
+        <span class="job-title" title="클릭 또는 더블클릭으로 이름 변경">${TT.esc(j.title)}</span>
+        ${jobBadge(j, pct)}
+        <button class="job-edit" title="이름 변경">✎</button>
+        <button class="job-x" title="작업 삭제">✕</button>
+      </div>
+      <div class="job-assign">
+        <span class="lbl">담당</span>
+        <select class="j-assignee">${memberOptions(j.assignee)}</select>
+      </div>
+      <div class="tasks">
+        ${j.tasks.map((t) => {
+          const st = taskStatus(t);
+          return `
+          <div class="task s-${st} ${st === 'done' ? 'done' : ''}" data-task="${t.id}">
+            <span class="t-drag" title="드래그해서 순서 변경">⠿</span>
+            <input type="checkbox" ${st === 'done' ? 'checked' : ''} title="완료 체크">
+            <span class="t-title" title="더블클릭으로 수정">${TT.esc(t.title)}</span>
+            <select class="t-status s-${st}" title="진행 상태">${taskStatusOptions(st)}</select>
+            <select class="t-assignee" title="담당자">${memberOptions(t.assignee)}</select>
+            <button class="t-x" title="삭제">✕</button>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="job-add"><input type="text" placeholder="+ 할 일 추가 (Enter)" maxlength="300"></div>`;
+
+    // ----- 리사이즈 핸들 (좌/우) -----
+    el.querySelectorAll('.job-resize').forEach((handle) => {
+      const side = handle.classList.contains('left') ? 'left' : 'right';
+      handle.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (e.button !== 0) return;
+        resizing = {
+          job: j, el, side,
+          startX: e.clientX,
+          startWidth: taskWidth(j),
+          startXPos: j.x,
+          moved: false,
+        };
+        interacting = true;
+        el.classList.add('resizing');
+        handle.setPointerCapture(e.pointerId);
+      });
+      handle.addEventListener('pointermove', (e) => {
+        if (!resizing || resizing.job !== j) return;
+        const dx = (e.clientX - resizing.startX) / view.z;
+        let w, nx = resizing.startXPos;
+        if (side === 'right') {
+          w = Math.round(resizing.startWidth + dx);
+        } else {
+          w = Math.round(resizing.startWidth - dx);
+          nx = Math.round(resizing.startXPos + dx);
+        }
+        w = Math.max(NODE_MIN, Math.min(NODE_MAX, w));
+        // 실제 delta 재계산 (min/max에 클램프된 경우 x 보정)
+        if (side === 'left') nx = resizing.startXPos + (resizing.startWidth - w);
+        j.width = w; j.x = nx;
+        resizing.moved = true;
+        el.style.width = w + 'px';
+        el.style.left = j.x + 'px';
+        renderEdges();
+      });
+      handle.addEventListener('pointerup', () => {
+        if (!resizing || resizing.job !== j) return;
+        el.classList.remove('resizing');
+        const moved = resizing.moved;
+        resizing = null;
+        interacting = false;
+        if (moved) {
+          TT.api('POST', `/api/features?project=${project.id}`, {
+            op: 'updateJob', jobId: j.id, x: j.x, width: j.width,
+          }).catch((ex) => TT.toast(ex.message, true));
+        }
+      });
+    });
+
+    // ----- 노드 드래그 (헤더) -----
+    const head = el.querySelector('.job-head');
+    head.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button, input, select')) return;
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const start = toWorld(e.clientX, e.clientY);
+      dragging = { job: j, el, dx: start.x - j.x, dy: start.y - j.y, moved: false };
+      interacting = true;
+      el.classList.add('dragging');
+      head.setPointerCapture(e.pointerId);
+    });
+    head.addEventListener('pointermove', (e) => {
+      if (!dragging || dragging.job !== j) return;
+      const p = toWorld(e.clientX, e.clientY);
+      j.x = Math.round(p.x - dragging.dx);
+      j.y = Math.round(p.y - dragging.dy);
+      dragging.moved = true;
+      el.style.left = j.x + 'px';
+      el.style.top = j.y + 'px';
+      renderEdges();
+    });
+    head.addEventListener('pointerup', () => {
+      if (!dragging || dragging.job !== j) return;
+      el.classList.remove('dragging');
+      const moved = dragging.moved;
+      dragging = null;
+      interacting = false;
+      if (moved) {
+        // 위치만 저장 (그래프 응답 렌더 생략용으로 fire-and-forget)
+        TT.api('POST', `/api/features?project=${project.id}`, { op: 'updateJob', jobId: j.id, x: j.x, y: j.y })
+          .catch((ex) => TT.toast(ex.message, true));
+      }
+    });
+
+    // ----- 제목 인라인 수정 -----
+    const titleEl = el.querySelector('.job-title');
+    const startTitleEdit = () => {
+      if (el.querySelector('.job-title-input')) return; // 이미 편집 중
+      const current = el.querySelector('.job-title');
+      if (!current) return;
+      interacting = true;
+      const input = document.createElement('input');
+      input.className = 'job-title-input';
+      input.value = j.title;
+      input.maxLength = 200;
+      current.replaceWith(input);
+      input.focus(); input.select();
+      const commit = () => {
+        interacting = false;
+        const v = input.value.trim();
+        if (v && v !== j.title) op({ op: 'updateJob', jobId: j.id, title: v });
+        else render();
+      };
+      input.onblur = commit;
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') { input.value = j.title; input.blur(); }
+      };
+      // 드래그로 오인되지 않도록 pointerdown 버블링 차단
+      input.addEventListener('pointerdown', (e) => e.stopPropagation());
+    };
+    titleEl.ondblclick = startTitleEdit;
+
+    // ----- 이름 변경 버튼 -----
+    const editBtn = el.querySelector('.job-edit');
+    editBtn.onclick = (e) => { e.stopPropagation(); startTitleEdit(); };
+    editBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    // ----- 잡 삭제 (2단 확인) -----
+    const xBtn = el.querySelector('.job-x');
+    xBtn.onclick = () => {
+      if (xBtn.dataset.armed) { op({ op: 'deleteJob', jobId: j.id }); return; }
+      xBtn.dataset.armed = '1';
+      xBtn.textContent = '삭제?';
+      xBtn.style.color = 'var(--red)';
+      setTimeout(() => { xBtn.dataset.armed = ''; xBtn.textContent = '✕'; xBtn.style.color = ''; }, 2500);
+    };
+
+    // ----- 잡 담당자 -----
+    el.querySelector('.j-assignee').onchange = (e) =>
+      op({ op: 'updateJob', jobId: j.id, assignee: e.target.value });
+
+    // ----- 태스크 상호작용 -----
+    el.querySelectorAll('.task').forEach((tEl) => {
+      const tid = tEl.dataset.task;
+      const task = j.tasks.find((t) => t.id === tid);
+      tEl.querySelector('input[type=checkbox]').onchange = (e) =>
+        op({ op: 'updateTask', jobId: j.id, taskId: tid, done: e.target.checked });
+      tEl.querySelector('.t-status').onchange = (e) => {
+        // 서버 응답 오기 전 즉시 색 반영
+        e.target.className = 't-status s-' + e.target.value;
+        op({ op: 'updateTask', jobId: j.id, taskId: tid, status: e.target.value });
+      };
+      tEl.querySelector('.t-assignee').onchange = (e) =>
+        op({ op: 'updateTask', jobId: j.id, taskId: tid, assignee: e.target.value });
+      tEl.querySelector('.t-x').onclick = () =>
+        op({ op: 'deleteTask', jobId: j.id, taskId: tid });
+      const startTaskEdit = (e) => {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        const span = tEl.querySelector('.t-title');
+        if (!span) return; // 이미 편집 중
+        interacting = true;
+        const input = document.createElement('input');
+        input.className = 't-edit';
+        input.type = 'text';
+        input.value = task.title;
+        input.maxLength = 300;
+        span.replaceWith(input);
+        input.focus(); input.select();
+        input.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+        input.addEventListener('dblclick', (ev) => ev.stopPropagation());
+        const commit = () => {
+          interacting = false;
+          const v = input.value.trim();
+          if (v && v !== task.title) op({ op: 'updateTask', jobId: j.id, taskId: tid, title: v });
+          else render();
+        };
+        input.onblur = commit;
+        input.onkeydown = (ev) => {
+          if (ev.key === 'Enter') input.blur();
+          if (ev.key === 'Escape') { input.value = task.title; input.blur(); }
+        };
+      };
+      // 태스크 어디를 더블클릭해도 편집 (컨트롤 요소는 제외)
+      tEl.addEventListener('dblclick', (e) => {
+        if (e.target.closest('input, select, button, .t-drag')) return;
+        startTaskEdit(e);
+      });
+    });
+
+    // ----- 태스크 순서 변경 (드래그 핸들) -----
+    const tasksEl = el.querySelector('.tasks');
+    el.querySelectorAll('.t-drag').forEach((handle) => {
+      handle.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const row = handle.closest('.task');
+        interacting = true;
+        row.classList.add('t-dragging');
+        // 커서가 행을 잡은 지점(행 상단 기준 오프셋, 화면 px)
+        const grabOffsetY = e.clientY - row.getBoundingClientRect().top;
+        let moved = false;
+
+        // 잡은 행을 커서 아래에 띄우고, 나머지는 그 자리로 흘러들어가게 한다.
+        // DOM 재삽입 시 pointer capture가 풀리므로 document에 리스너를 붙인다.
+        const onMove = (ev) => {
+          moved = true;
+          const others = [...tasksEl.querySelectorAll('.task:not(.t-dragging)')];
+          const next = others.find((r) => {
+            const rect = r.getBoundingClientRect();
+            return ev.clientY < rect.top + rect.height / 2;
+          });
+          if (next) tasksEl.insertBefore(row, next);
+          else tasksEl.appendChild(row);
+          // 잡은 행이 커서를 따라오게 (world scale 보정)
+          row.style.transform = 'none';
+          const natTop = row.getBoundingClientRect().top;
+          row.style.transform = `translateY(${(ev.clientY - grabOffsetY - natTop) / view.z}px)`;
+        };
+        const onUp = () => {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          row.classList.remove('t-dragging');
+          row.style.transform = '';
+          interacting = false;
+          if (!moved) return;
+          const order = [...tasksEl.querySelectorAll('.task')].map((r) => r.dataset.task);
+          op({ op: 'reorderTasks', jobId: j.id, order });
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+      });
+    });
+
+    // ----- 할 일 추가 -----
+    const addInput = el.querySelector('.job-add input');
+    addInput.onfocus = () => { interacting = true; };
+    addInput.onblur = () => { interacting = false; };
+    addInput.onkeydown = (e) => {
+      if (e.key === 'Enter' && addInput.value.trim()) {
+        focusAddJob = j.id;
+        op({ op: 'addTask', jobId: j.id, title: addInput.value.trim(), assignee: TT.me() });
+      }
+    };
+
+    // ----- 간선 연결 (출력 포트에서 드래그) -----
+    el.querySelector('.port.out').addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const p = toWorld(e.clientX, e.clientY);
+      draft = { from: j.id, mx: p.x, my: p.y };
+      interacting = true;
+      renderEdges();
+    });
+    // 입력 포트/노드 위에서 드롭
+    el.addEventListener('pointerup', () => {
+      if (draft && draft.from !== j.id) {
+        const from = draft.from;
+        draft = null;
+        interacting = false;
+        op({ op: 'addEdge', from, to: j.id });
+      }
+    });
+
+    return el;
+  }
+
+  function render() {
+    nodesEl.innerHTML = '';
+    for (const j of jobs) {
+      const el = renderJob(j);
+      if (jobHidden(j)) el.style.display = 'none';
+      nodesEl.appendChild(el);
+    }
+    renderEdges();
+    applyView();
+    const anyVisible = jobs.some((j) => !jobHidden(j));
+    if (!anyVisible) {
+      const note = document.createElement('div');
+      note.className = 'empty-note';
+      note.style.cssText = 'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:max-content';
+      note.innerHTML = jobs.length
+        ? '내가 담당한 작업이 없습니다.<br>“내 담당만”을 끄면 전체 작업이 보입니다.'
+        : '아직 작업이 없습니다.<br>“+ 작업 추가” 버튼이나 빈 곳 더블클릭으로 시작하세요.';
+      nodesEl.appendChild(note);
+    }
+    if (focusAddJob) {
+      const inp = nodesEl.querySelector(`.job[data-id="${focusAddJob}"] .job-add input`);
+      focusAddJob = null;
+      if (inp) inp.focus();
+    }
+  }
+
+  // ---------- 캔버스 팬/줌/간선 드래프트 ----------
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.job, .edge-del, path.edge-hit')) return;
+    if (e.button !== 0 && e.button !== 1) return;
+    const start = { mx: e.clientX, my: e.clientY, vx: view.x, vy: view.y, moved: false };
+    canvas.classList.add('panning');
+    canvas.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      start.moved = start.moved || Math.abs(ev.clientX - start.mx) + Math.abs(ev.clientY - start.my) > 3;
+      view.x = start.vx + (ev.clientX - start.mx);
+      view.y = start.vy + (ev.clientY - start.my);
+      applyView();
+    };
+    const up = () => {
+      canvas.classList.remove('panning');
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up);
+      if (!start.moved && selEdge) { selEdge = null; render(); } // 빈 곳 클릭 → 선택 해제
+    };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!draft) return;
+    const p = toWorld(e.clientX, e.clientY);
+    draft.mx = p.x; draft.my = p.y;
+    renderEdges();
+    // 드롭 대상 하이라이트
+    nodesEl.querySelectorAll('.port.in').forEach((port) => {
+      const jid = port.closest('.job').dataset.id;
+      port.classList.toggle('hot', jid !== draft.from && port.closest('.job').matches(':hover'));
+    });
+  });
+
+  canvas.addEventListener('pointerup', () => {
+    if (draft) { draft = null; interacting = false; renderEdges(); }
+  });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const nz = Math.min(2, Math.max(0.35, view.z * factor));
+    // 커서 위치 고정 줌
+    view.x = mx - ((mx - view.x) / view.z) * nz;
+    view.y = my - ((my - view.y) / view.z) * nz;
+    view.z = nz;
+    applyView();
+  }, { passive: false });
+
+  canvas.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.job, .edge-del, .task, .tasks')) return;
+    const p = toWorld(e.clientX, e.clientY);
+    op({ op: 'addJob', title: '새 작업', x: p.x - NODE_W / 2, y: p.y - 20, assignee: TT.me() });
+  });
+
+  main.querySelector('#addJob').onclick = () => {
+    const p = toWorld(canvas.clientWidth / 2 + canvas.getBoundingClientRect().left, 200 + canvas.getBoundingClientRect().top);
+    op({ op: 'addJob', title: '새 작업', x: p.x - NODE_W / 2, y: p.y, assignee: TT.me() });
+  };
+
+  main.querySelector('#fitBtn').onclick = () => {
+    if (!jobs.length) return;
+    const minX = Math.min(...jobs.map((j) => j.x)) - 60;
+    const minY = Math.min(...jobs.map((j) => j.y)) - 60;
+    const maxX = Math.max(...jobs.map((j) => j.x + NODE_W)) + 60;
+    const maxY = Math.max(...jobs.map((j) => j.y + 220)) + 60;
+    const z = Math.min(1.2, canvas.clientWidth / (maxX - minX), canvas.clientHeight / (maxY - minY));
+    view.z = Math.max(0.35, z);
+    view.x = (canvas.clientWidth - (maxX - minX) * view.z) / 2 - minX * view.z;
+    view.y = (canvas.clientHeight - (maxY - minY) * view.z) / 2 - minY * view.z;
+    applyView();
+  };
+
+  const fMine = main.querySelector('#fMine');
+  fMine.onclick = () => {
+    mineOnly = !mineOnly;
+    fMine.classList.toggle('on', mineOnly);
+    if (mineOnly && !TT.me()) TT.toast('상단에서 “나”를 먼저 선택하세요');
+    render();
+  };
+  const onMe = () => { if (mineOnly) render(); };
+  document.addEventListener('tt:me-changed', onMe);
+
+  // ---------- 로드 + 폴링 ----------
+  await load();
+  if (jobs.length) main.querySelector('#fitBtn').click();
+
+  const timer = setInterval(() => {
+    if (document.hidden || interacting || dragging || draft) return;
+    if (main.contains(document.activeElement) && document.activeElement.matches('input, select')) return;
+    load();
+  }, 15000);
+
+  return () => {
+    clearInterval(timer);
+    document.removeEventListener('tt:me-changed', onMe);
+  };
+};

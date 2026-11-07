@@ -98,11 +98,13 @@ function chooseProject(project, push = true) {
 async function mutate(method, body) { const result = await TT.api(method, API, body); await refresh(true); return result; }
 function options(values, selected) { return values.map(v => { const [value,label] = Array.isArray(v) ? v : [v,v]; return `<option value="${esc(value)}" ${value === selected ? 'selected' : ''}>${esc(label)}</option>`; }).join(''); }
 function inputField(name, label, value = '', type = 'text', extra = '', full = false) { return `<label class="field ${full ? 'full' : ''}"><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`; }
-function selectField(name, label, values, value, full = false) { return `<label class="field ${full ? 'full' : ''}"><span>${label}</span><select name="${name}">${options(values,value)}</select></label>`; }
+function selectField(name, label, values, value, full = false) { return `<div class="field ${full ? 'full' : ''}"><label for="entity-${name}-trigger">${label}</label><select id="entity-${name}" name="${name}" aria-label="${label}">${options(values,value)}</select></div>`; }
 const projectOptions = [['patz','PATZ'],['room42','room42'],['mandudang','mandudang']];
 const memberOptions = ['은우','민우','채은','undefined'];
 const dialog = $('#editDialog');
-dialog.addEventListener('close', () => { dialog.innerHTML = ''; });
+let formSelects = {};
+function destroyFormSelects() { Object.values(formSelects).forEach(select => select.destroy()); formSelects = {}; }
+dialog.addEventListener('close', () => { destroyFormSelects(); dialog.innerHTML = ''; });
 dialog.addEventListener('click', e => { if (e.target === dialog) { const r=dialog.getBoundingClientRect(); if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom) dialog.close(); } });
 function subtaskField(t = {}) { return `<div class="subtask-field" data-sub-id="${t.id || crypto.randomUUID()}"><input type="checkbox" aria-label="세부 할 일 완료" ${t.done ? 'checked' : ''}><input type="text" value="${esc(t.title || '')}" maxlength="300" placeholder="세부 할 일" aria-label="세부 할 일 내용"><button type="button" data-remove-sub aria-label="세부 할 일 삭제">×</button></div>`; }
 async function openForm(type, record = null, focus = 'title') {
@@ -132,9 +134,12 @@ async function openForm(type, record = null, focus = 'title') {
   } else if (type === 'notes') {
     fields = inputField('title','회의록 제목',item.title || `${data.notes.length + 1}차 회의록`,'text','required maxlength="300"',true) + inputField('date','회의 날짜',item.date || TT.todayStr(),'date','required',true);
   }
-  dialog.innerHTML = `<form id="entityForm"><div class="dialog-head"><h2>${HEADINGS[type]}</h2><button type="button" class="close-button" aria-label="닫기">×</button></div><div class="form-grid">${fields}</div><p class="form-error" role="alert"></p><div class="form-actions">${item.id ? '<button type="button" class="danger-button" id="deleteRecord">삭제</button>' : ''}<span class="spacer"></span><button type="button" class="outline-button cancel">취소</button><button class="solid-button" type="submit">${item.id ? '저장' : '추가'}</button></div></form>`;
-  dialog.showModal();
+  destroyFormSelects();
+  dialog.innerHTML = `<form id="entityForm"><div class="dialog-head"><h2 id="entityHeading">${HEADINGS[type]}</h2><button type="button" class="close-button" aria-label="닫기">×</button></div><div class="form-grid">${fields}</div><p class="form-error" role="alert"></p><div class="form-actions">${item.id ? '<button type="button" class="danger-button" id="deleteRecord">삭제</button>' : ''}<span class="spacer"></span><button type="button" class="outline-button cancel">취소</button><button class="solid-button" type="submit">${item.id ? '저장' : '추가'}</button></div></form>`;
+  dialog.setAttribute('aria-labelledby', 'entityHeading');
   const form = $('#entityForm');
+  formSelects = Object.fromEntries($$('select', form).map(select => [select.name, createFilterChip(select, { field: true })]));
+  dialog.showModal();
   $('.close-button',dialog).onclick = $('.cancel',dialog).onclick = () => dialog.close();
   if(type === 'tasks') {
     $('.subtask-add',dialog).onclick = () => { $('.subtask-fields',dialog).insertAdjacentHTML('afterbegin',subtaskField()); $('.subtask-fields .subtask-field:first-child input[type=text]',dialog).focus(); };
@@ -156,7 +161,7 @@ async function openForm(type, record = null, focus = 'title') {
   }
   if (type === 'expenses') { const total = () => $('#expenseTotal').textContent = `총 지출 ${money(Number(form.elements.quantity.value) * Number(form.elements.unitPrice.value))} · 세 프로젝트 공용 예산`; form.oninput = total; total(); }
   const target = focus === 'subtasks' ? $('.subtask-field input[type=text]',form) || $('.subtask-add',form) : form.elements[focus];
-  target?.focus();
+  if (formSelects[focus]) formSelects[focus].focus(); else target?.focus();
   if (item.id) $('#deleteRecord').onclick = async () => {
     const button = $('#deleteRecord');
     if (!button.dataset.confirm) { button.dataset.confirm = 'yes'; button.textContent = '한 번 더 눌러 삭제'; return; }

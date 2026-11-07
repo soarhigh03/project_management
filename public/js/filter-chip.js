@@ -1,8 +1,11 @@
 // Keep the select's value/change contract while rendering a consistent dropdown.
-export function createFilterChip(select) {
+export function createFilterChip(select, { field = false } = {}) {
+  const controller = new AbortController();
+  const { signal } = controller;
   const root = document.createElement('div');
-  root.className = 'filter-chip';
+  root.className = field ? 'filter-chip field-select' : 'filter-chip';
   const trigger = document.createElement('button');
+  trigger.id = `${select.id}-trigger`;
   trigger.type = 'button';
   trigger.className = 'filter-trigger';
   trigger.setAttribute('role', 'combobox');
@@ -26,6 +29,9 @@ export function createFilterChip(select) {
   menu.hidden = true;
   menu.setAttribute('role', 'listbox');
   menu.setAttribute('aria-label', select.getAttribute('aria-label'));
+  // A top-layer menu stays below its field without being clipped by the dialog.
+  const usePopover = field && typeof menu.showPopover === 'function';
+  if (usePopover) menu.setAttribute('popover', 'manual');
   const options = [...select.options].map(option => {
     const measure = document.createElement('span');
     measure.textContent = option.textContent;
@@ -53,18 +59,28 @@ export function createFilterChip(select) {
 
   function sync() {
     label.textContent = select.selectedOptions[0]?.textContent || '';
+    trigger.disabled = select.disabled;
     for (const option of options) option.setAttribute('aria-selected', String(option.dataset.value === select.value));
   }
   function close(focus = false) {
+    if (usePopover && menu.matches(':popover-open')) menu.hidePopover();
     menu.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
-    if (focus) trigger.focus();
+    if (focus) trigger.focus({ preventScroll: true });
   }
   function open(index = select.selectedIndex) {
-    menu.style.maxHeight = `${Math.max(44, Math.min(280, window.innerHeight - trigger.getBoundingClientRect().bottom - 12))}px`;
+    const rect = trigger.getBoundingClientRect();
+    const viewportBottom = window.visualViewport ? window.visualViewport.offsetTop + window.visualViewport.height : window.innerHeight;
+    menu.style.maxHeight = `${Math.max(44, Math.min(280, viewportBottom - rect.bottom - 12))}px`;
+    if (usePopover) {
+      menu.style.left = `${rect.left}px`;
+      menu.style.top = `${rect.bottom + 6}px`;
+      menu.style.width = `${rect.width}px`;
+    }
     menu.hidden = false;
+    if (usePopover) menu.showPopover();
     trigger.setAttribute('aria-expanded', 'true');
-    options[Math.max(0, index)]?.focus();
+    options[Math.max(0, index)]?.focus({ preventScroll: true });
   }
   trigger.onclick = () => menu.hidden ? open() : close(true);
   trigger.onkeydown = event => {
@@ -78,7 +94,7 @@ export function createFilterChip(select) {
     const index = options.indexOf(document.activeElement);
     const next = { ArrowDown: (index + 1) % options.length, ArrowUp: (index - 1 + options.length) % options.length, Home: 0, End: options.length - 1 }[event.key];
     if (next !== undefined) { event.preventDefault(); options[next].focus(); }
-    else if (event.key === 'Escape') { event.preventDefault(); close(true); }
+    else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
     else if (event.key === 'Tab') close(true);
     else if (event.key.length === 1 && event.key !== ' ' && !event.metaKey && !event.ctrlKey) {
       clearTimeout(searchTimer);
@@ -87,10 +103,16 @@ export function createFilterChip(select) {
       searchTimer = setTimeout(() => { search = ''; }, 500);
     }
   };
-  root.addEventListener('focusout', event => { if (!root.contains(event.relatedTarget)) close(); });
-  document.addEventListener('pointerdown', event => { if (!root.contains(event.target)) close(); });
-  window.addEventListener('resize', () => close());
-  select.addEventListener('change', sync);
+  root.addEventListener('focusout', event => { if (!root.contains(event.relatedTarget)) close(); }, { signal });
+  document.addEventListener('pointerdown', event => { if (!root.contains(event.target)) close(); }, { signal });
+  window.addEventListener('resize', () => close(), { signal });
+  select.closest('dialog')?.addEventListener('scroll', () => close(), { signal });
+  window.visualViewport?.addEventListener('resize', () => close(), { signal });
+  select.addEventListener('change', sync, { signal });
   sync();
-  return { sync, close };
+  return {
+    sync, close,
+    focus: () => trigger.focus(),
+    destroy() { close(); clearTimeout(searchTimer); controller.abort(); }
+  };
 }
